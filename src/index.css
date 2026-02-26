@@ -1,0 +1,179 @@
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 195 22% 92%;
+    --foreground: 210 30% 12%;
+
+    --card: 195 20% 96%;
+    --card-foreground: 210 30% 12%;
+
+    --popover: 195 20% 96%;
+    --popover-foreground: 210 30% 12%;
+
+    --primary: 187 55% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 195 18% 88%;
+    --secondary-foreground: 210 30% 16%;
+
+    --muted: 195 16% 86%;
+    --muted-foreground: 210 12% 35%;
+
+    --accent: 187 55% 38%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
+
+    --border: 195 14% 74%;
+    --input: 195 14% 74%;
+    --ring: 187 55% 38%;
+
+    --radius: 0.25rem;
+
+    --sidebar-background: 210 22% 14%;
+    --sidebar-foreground: 210 12% 92%;
+    --sidebar-primary: 187 55% 46%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 18% 20%;
+    --sidebar-accent-foreground: 210 12% 92%;
+    --sidebar-border: 210 18% 20%;
+    --sidebar-ring: 187 55% 46%;
+
+    --clinic-teal: 187 55% 38%;
+    --clinic-teal-light: 187 40% 88%;
+    --clinic-amber: 38 92% 50%;
+    --clinic-red: 0 72% 51%;
+    --clinic-green: 142 71% 45%;
+  }
+
+  .dark {
+    --background: 210 30% 8%;
+    --foreground: 210 15% 95%;
+
+    --card: 210 30% 12%;
+    --card-foreground: 210 15% 95%;
+
+    --popover: 210 30% 12%;
+    --popover-foreground: 210 15% 95%;
+
+    --primary: 187 55% 46%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 25% 18%;
+    --secondary-foreground: 210 15% 90%;
+
+    --muted: 210 25% 15%;
+    --muted-foreground: 210 15% 60%;
+
+    --accent: 187 55% 46%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 25% 20%;
+    --input: 210 25% 20%;
+    --ring: 187 55% 46%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 13px;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: "Segoe UI", "Tahoma", "Arial", "Geist Sans", system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .stat-card {
+    @apply bg-card rounded-md border border-border px-4 py-3 shadow-none transition-colors hover:bg-muted/40;
+  }
+
+  .module-header {
+    @apply flex items-center justify-between mb-4 pb-2 border-b border-border;
+  }
+
+  .quick-action-btn {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-primary text-primary-foreground font-medium transition-colors hover:bg-primary/90;
+  }
+
+  .data-table {
+    @apply w-full border-collapse;
+  }
+
+  .data-table th {
+    @apply px-4 py-2.5 text-left text-[12px] font-semibold text-foreground bg-muted/60 border-b border-border;
+  }
+
+  .data-table td {
+    @apply px-4 py-2.5 text-sm border-b border-border;
+  }
+
+  .data-table tr:hover {
+    @apply bg-muted/30;
+  }
+
+  .form-field {
+    @apply space-y-1.5;
+  }
+
+  .form-label {
+    @apply block text-[12px] font-semibold text-foreground;
+  }
+
+  .form-input {
+    @apply w-full h-8 px-2.5 rounded-sm border border-input bg-background text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:border-transparent transition-colors;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-success text-success-foreground;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-warning text-warning-foreground;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center px-2 py-0.5 rounded-sm text-[12px] font-semibold bg-destructive text-destructive-foreground;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

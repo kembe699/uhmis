@@ -1,0 +1,112 @@
+nohup: ignoring input
+🚀 Server running on port 3001
+📊 Health check: http://localhost:3001/health
+🔌 API status: http://localhost:3001/api/status
+Database connection established successfully.
+password_hash column already exists
+lab_tests table already has all required columns
+Cleaning up lab_test_components table...
+Dropped existing lab_test_components table
+Created clean lab_test_components table with correct structure
+patient_bills table already exists
+Checking for foreign key constraints on patient_bills table...
+No foreign key constraints found on patient_bills table
+Checking services table structure...
+Dropped existing services table
+Created services table with correct structure
+Inserted sample services
+dr_clinics table already exists
+Checking pharmacy tables...
+Created/verified drug_inventory table
+Created/verified pharmacy_dispensing table
+Created/verified prescriptions table
+Checking visits table...
+Created/verified visits table
+Checking receipts table...
+Created/verified receipts table
+Creating lab_requests table...
+Created/verified lab_requests table
+Creating lab_results table...
+Created/verified lab_results table
+Database models synchronized.
+✅ Database initialized successfully
+Error adding patient to queue: Error
+    at Query.run (/home/universal-hospital/development/server/node_modules/sequelize/lib/dialects/mysql/query.js:52:25)
+    at /home/universal-hospital/development/server/node_modules/sequelize/lib/sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async MySQLQueryInterface.insert (/home/universal-hospital/development/server/node_modules/sequelize/lib/dialects/abstract/query-interface.js:308:21)
+    at async model.save (/home/universal-hospital/development/server/node_modules/sequelize/lib/model.js:2490:35)
+    at async Visit.create (/home/universal-hospital/development/server/node_modules/sequelize/lib/model.js:1362:12)
+    at async /home/universal-hospital/development/server/routes/patientQueue.js:40:19 {
+  name: 'SequelizeForeignKeyConstraintError',
+  parent: Error: Cannot add or update a child row: a foreign key constraint fails (`universal_hmis`.`visits`, CONSTRAINT `visits_ibfk_3` FOREIGN KEY (`doctor_id`) REFERENCES `users` (`id`))
+      at Packet.asError (/home/universal-hospital/development/server/node_modules/mysql2/lib/packets/packet.js:740:17)
+      at Execute.execute (/home/universal-hospital/development/server/node_modules/mysql2/lib/commands/command.js:29:26)
+      at Connection.handlePacket (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:508:34)
+      at PacketParser.onPacket (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:93:12)
+      at PacketParser.executeStart (/home/universal-hospital/development/server/node_modules/mysql2/lib/packet_parser.js:75:16)
+      at Socket.<anonymous> (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:100:25)
+      at Socket.emit (node:events:517:28)
+      at addChunk (node:internal/streams/readable:368:12)
+      at readableAddChunk (node:internal/streams/readable:341:9)
+      at Readable.push (node:internal/streams/readable:278:10) {
+    code: 'ER_NO_REFERENCED_ROW_2',
+    errno: 1452,
+    sqlState: '23000',
+    sqlMessage: 'Cannot add or update a child row: a foreign key constraint fails (`universal_hmis`.`visits`, CONSTRAINT `visits_ibfk_3` FOREIGN KEY (`doctor_id`) REFERENCES `users` (`id`))',
+    sql: 'INSERT INTO `visits` (`id`,`visit_date`,`patient_id`,`status`,`clinic_id`,`doctor_id`,`created_at`,`updated_at`) VALUES (?,?,?,?,?,?,?,?);',
+    parameters: [
+      '1e9fbb90-cae4-4551-9e9b-a7eca179d875',
+      '2026-01-13 16:48:04',
+      '7a8a66a9-1326-4dac-a722-785a033ecfcf',
+      'active',
+      1,
+      'system',
+      '2026-01-13 16:48:04',
+      '2026-01-13 16:48:04'
+    ]
+  },
+  original: Error: Cannot add or update a child row: a foreign key constraint fails (`universal_hmis`.`visits`, CONSTRAINT `visits_ibfk_3` FOREIGN KEY (`doctor_id`) REFERENCES `users` (`id`))
+      at Packet.asError (/home/universal-hospital/development/server/node_modules/mysql2/lib/packets/packet.js:740:17)
+      at Execute.execute (/home/universal-hospital/development/server/node_modules/mysql2/lib/commands/command.js:29:26)
+      at Connection.handlePacket (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:508:34)
+      at PacketParser.onPacket (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:93:12)
+      at PacketParser.executeStart (/home/universal-hospital/development/server/node_modules/mysql2/lib/packet_parser.js:75:16)
+      at Socket.<anonymous> (/home/universal-hospital/development/server/node_modules/mysql2/lib/base/connection.js:100:25)
+      at Socket.emit (node:events:517:28)
+      at addChunk (node:internal/streams/readable:368:12)
+      at readableAddChunk (node:internal/streams/readable:341:9)
+      at Readable.push (node:internal/streams/readable:278:10) {
+    code: 'ER_NO_REFERENCED_ROW_2',
+    errno: 1452,
+    sqlState: '23000',
+    sqlMessage: 'Cannot add or update a child row: a foreign key constraint fails (`universal_hmis`.`visits`, CONSTRAINT `visits_ibfk_3` FOREIGN KEY (`doctor_id`) REFERENCES `users` (`id`))',
+    sql: 'INSERT INTO `visits` (`id`,`visit_date`,`patient_id`,`status`,`clinic_id`,`doctor_id`,`created_at`,`updated_at`) VALUES (?,?,?,?,?,?,?,?);',
+    parameters: [
+      '1e9fbb90-cae4-4551-9e9b-a7eca179d875',
+      '2026-01-13 16:48:04',
+      '7a8a66a9-1326-4dac-a722-785a033ecfcf',
+      'active',
+      1,
+      'system',
+      '2026-01-13 16:48:04',
+      '2026-01-13 16:48:04'
+    ]
+  },
+  sql: 'INSERT INTO `visits` (`id`,`visit_date`,`patient_id`,`status`,`clinic_id`,`doctor_id`,`created_at`,`updated_at`) VALUES (?,?,?,?,?,?,?,?);',
+  parameters: [
+    '1e9fbb90-cae4-4551-9e9b-a7eca179d875',
+    '2026-01-13 16:48:04',
+    '7a8a66a9-1326-4dac-a722-785a033ecfcf',
+    'active',
+    1,
+    'system',
+    '2026-01-13 16:48:04',
+    '2026-01-13 16:48:04'
+  ],
+  table: 'users',
+  fields: [ 'doctor_id' ],
+  value: 'system',
+  index: 'visits_ibfk_3',
+  reltype: 'child'
+}

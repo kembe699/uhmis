@@ -1,0 +1,2545 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext.mysql.pure';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { DrugInventory, Dispensing, Patient } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import {
+  Package,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  Bell,
+  Download,
+  Upload,
+  FileText,
+  BarChart3,
+  Pill,
+  User,
+  Calendar,
+  DollarSign,
+  Eye,
+  Loader2,
+  Printer,
+  X
+} from 'lucide-react';
+
+class PharmacyApiClient {
+  private baseUrl = '/api/pharmacy';
+
+  async getInventory(clinicId: string): Promise<DrugInventory[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/inventory/${clinicId}`);
+      if (!response.ok) throw new Error('Failed to fetch inventory');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+      throw error;
+    }
+  }
+
+  async addInventoryItem(item: any): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/inventory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      if (!response.ok) throw new Error('Failed to add inventory item');
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding inventory item:', error);
+      throw error;
+    }
+  }
+
+  async updateInventoryItem(itemId: string, item: any): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/inventory/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      if (!response.ok) throw new Error('Failed to update inventory item');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating inventory item:', error);
+      throw error;
+    }
+  }
+
+  async getDispensingHistory(clinicId: string): Promise<Dispensing[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dispensing/${clinicId}`);
+      if (!response.ok) throw new Error('Failed to fetch dispensing history');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching dispensing history:', error);
+      throw error;
+    }
+  }
+
+  async addDispensingRecord(dispensingData: any): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/dispensing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dispensingData),
+      });
+      if (!response.ok) throw new Error('Failed to add dispensing record');
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding dispensing record:', error);
+      throw error;
+    }
+  }
+
+  async getPatients(clinicId: string): Promise<Patient[]> {
+    try {
+      const response = await fetch(`/api/patients/clinic/${clinicId}`);
+      if (!response.ok) throw new Error('Failed to fetch patients');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      throw error;
+    }
+  }
+
+  async findActivePatientBill(patientId: string, clinicId: string): Promise<any> {
+    try {
+      const response = await fetch(`/api/patient-bills/active/${patientId}/${clinicId}`);
+      if (!response.ok) {
+        if (response.status === 404) return null; // No active bill found
+        throw new Error('Failed to find active patient bill');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error finding active patient bill:', error);
+      return null;
+    }
+  }
+
+  async createOrUpdatePatientBill(billData: any): Promise<any> {
+    try {
+      const response = await fetch('/api/patient-bills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(billData),
+      });
+      if (!response.ok) throw new Error('Failed to create/update patient bill');
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating/updating patient bill:', error);
+      throw error;
+    }
+  }
+
+  async addServicesToBill(billId: string, services: any[]): Promise<any> {
+    try {
+      const response = await fetch(`/api/patient-bills/${billId}/add-services`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ services }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to add services to bill');
+      return await response.json();
+    } catch (error) {
+      console.error('Error adding services to bill:', error);
+      throw error;
+    }
+  }
+
+  async createPharmacyReceipt(receiptData: any): Promise<any> {
+    try {
+      const response = await fetch('/api/pharmacy/receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(receiptData),
+      });
+      if (!response.ok) throw new Error('Failed to create pharmacy receipt');
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating pharmacy receipt:', error);
+      throw error;
+    }
+  }
+
+  async getPatientBills(clinicId: string, patientId?: string): Promise<any[]> {
+    try {
+      const url = patientId 
+        ? `/api/patient-bills/clinic/${clinicId}?patientId=${patientId}`
+        : `/api/patient-bills/clinic/${clinicId}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch patient bills');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching patient bills:', error);
+      throw error;
+    }
+  }
+}
+
+const Pharmacy: React.FC = () => {
+  const { user } = useAuth();
+  const pharmacyApi = new PharmacyApiClient();
+  
+  const [inventory, setInventory] = useState<DrugInventory[]>([]);
+  const [dispensingHistory, setDispensingHistory] = useState<Dispensing[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [dispensingDateRange, setDispensingDateRange] = useState({ from: '', to: '' });
+  const [dispensingUserFilter, setDispensingUserFilter] = useState('all');
+  const [uniqueDispensers, setUniqueDispensers] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddStock, setShowAddStock] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingItem, setEditingItem] = useState<DrugInventory | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [showDispenseModal, setShowDispenseModal] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [isWalkInClient, setIsWalkInClient] = useState(false);
+  const [walkInClientName, setWalkInClientName] = useState('');
+  const [dispensingItems, setDispensingItems] = useState<Array<{
+    inventoryId: string;
+    drugName: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    availableStock: number;
+  }>>([]);
+  const [dispensing, setDispensing] = useState(false);
+  const [showPaymentStep, setShowPaymentStep] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentReceived, setPaymentReceived] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [newStock, setNewStock] = useState({
+    drug_name: '',
+    generic_name: '',
+    current_stock: '',
+    unit_of_measure: 'Tablets',
+    reorder_level: '',
+    expiry_date: '',
+    batch_number: '',
+    date_received: new Date().toISOString().split('T')[0],
+    unit_cost: '',
+    margin_percentage: '',
+    selling_price: ''
+  });
+
+  // Calculate selling price when unit cost or margin percentage changes
+  const calculateSellingPrice = (cost: string, margin: string) => {
+    const costValue = parseFloat(cost);
+    const marginValue = parseFloat(margin);
+    
+    if (!isNaN(costValue) && !isNaN(marginValue) && costValue > 0 && marginValue >= 0) {
+      const sellingPrice = costValue + (costValue * marginValue / 100);
+      return sellingPrice.toFixed(2);
+    }
+    return '';
+  };
+
+  // Calculate margin percentage when selling price changes
+  const calculateMarginPercentage = (cost: string, sellingPrice: string) => {
+    const costValue = parseFloat(cost);
+    const priceValue = parseFloat(sellingPrice);
+    
+    if (!isNaN(costValue) && !isNaN(priceValue) && costValue > 0 && priceValue >= costValue) {
+      const margin = ((priceValue - costValue) / costValue) * 100;
+      return margin.toFixed(1);
+    }
+    return '';
+  };
+
+  // Generate batch number when form opens
+  const generateBatchNumber = () => {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `BATCH-${year}${month}${day}-${random}`;
+  };
+
+  // Auto-generate batch number when modal opens (only for new items)
+  useEffect(() => {
+    if (showAddStock && !isEditMode && !newStock.batch_number) {
+      setNewStock(prev => ({
+        ...prev,
+        batch_number: generateBatchNumber()
+      }));
+    }
+  }, [showAddStock, isEditMode]);
+
+  // Handle edit item
+  const handleEditItem = (item: DrugInventory) => {
+    setEditingItem(item);
+    setIsEditMode(true);
+    
+    const unitCost = item.unit_cost?.toString() || '';
+    const sellingPrice = item.selling_price?.toString() || '';
+    const marginPercentage = unitCost && sellingPrice 
+      ? calculateMarginPercentage(unitCost, sellingPrice)
+      : '';
+    
+    setNewStock({
+      drug_name: item.drug_name,
+      generic_name: item.generic_name || '',
+      current_stock: item.current_stock.toString(),
+      unit_of_measure: item.unit_of_measure || 'Tablets',
+      reorder_level: item.reorder_level.toString(),
+      expiry_date: item.expiry_date || '',
+      batch_number: item.batch_number || '',
+      date_received: item.date_received || new Date().toISOString().split('T')[0],
+      unit_cost: unitCost,
+      margin_percentage: marginPercentage,
+      selling_price: sellingPrice
+    });
+    setShowAddStock(true);
+  };
+
+  // Handle add new item
+  const handleAddNewItem = () => {
+    setEditingItem(null);
+    setIsEditMode(false);
+    setNewStock({
+      drug_name: '',
+      generic_name: '',
+      current_stock: '',
+      unit_of_measure: 'Tablets',
+      reorder_level: '',
+      expiry_date: '',
+      batch_number: '',
+      date_received: new Date().toISOString().split('T')[0],
+      unit_cost: '',
+      margin_percentage: '',
+      selling_price: ''
+    });
+    setShowAddStock(true);
+  };
+
+  // Download CSV template
+  const downloadTemplate = () => {
+    const headers = [
+      'drug_name',
+      'generic_name',
+      'current_stock',
+      'unit_of_measure',
+      'reorder_level',
+      'expiry_date',
+      'batch_number',
+      'date_received',
+      'unit_cost',
+      'selling_price'
+    ];
+    
+    const sampleData = [
+      'Paracetamol 500mg',
+      'Acetaminophen',
+      '100',
+      'Tablets',
+      '20',
+      '2025-12-31',
+      'BATCH-260111-001',
+      '2026-01-11',
+      '10.00',
+      '12.50'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      sampleData.join(','),
+      // Add empty row for user to fill
+      headers.map(() => '').join(',')
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'pharmacy_inventory_template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast.success('Template downloaded successfully');
+  };
+
+  // Handle CSV file selection
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === 'text/csv') {
+      setCsvFile(file);
+      parseCSVPreview(file);
+    } else {
+      toast.error('Please select a valid CSV file');
+    }
+  };
+
+  // Parse CSV for preview
+  const parseCSVPreview = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = lines.slice(1, 6).map(line => { // Preview first 5 rows
+        const values = line.split(',').map(v => v.trim());
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        return row;
+      });
+      setImportPreview(data);
+    };
+    reader.readAsText(file);
+  };
+
+  // Handle CSV import
+  const handleImportCSV = async () => {
+    if (!csvFile || !user?.clinic) return;
+
+    try {
+      setImporting(true);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target?.result as string;
+        const lines = text.split('\n').filter(line => line.trim());
+        const headers = lines[0].split(',').map(h => h.trim());
+        
+        const importData = lines.slice(1).map(line => {
+          const values = line.split(',').map(v => v.trim());
+          const row: any = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+          
+          // Transform data to match API requirements
+          return {
+            drug_name: row.drug_name,
+            generic_name: row.generic_name || '',
+            unit_of_measure: row.unit_of_measure || 'Tablets',
+            quantity_received: parseInt(row.current_stock) || 0,
+            current_stock: parseInt(row.current_stock) || 0,
+            expiry_date: row.expiry_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            batch_number: row.batch_number || generateBatchNumber(),
+            reorder_level: parseInt(row.reorder_level) || 10,
+            clinic_id: parseInt(user.clinic),
+            date_received: row.date_received || new Date().toISOString().split('T')[0],
+            received_by: user.uid || user.id || 'system',
+            unit_cost: parseFloat(row.unit_cost) || 0,
+            selling_price: parseFloat(row.selling_price) || 0
+          };
+        }).filter(item => item.drug_name); // Filter out empty rows
+
+        // Import each item
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const item of importData) {
+          try {
+            await pharmacyApi.addInventoryItem(item);
+            successCount++;
+          } catch (error) {
+            console.error('Error importing item:', item.drug_name, error);
+            errorCount++;
+          }
+        }
+
+        toast.success(`Import completed: ${successCount} items added${errorCount > 0 ? `, ${errorCount} errors` : ''}`);
+        setShowImportModal(false);
+        setCsvFile(null);
+        setImportPreview([]);
+        fetchData();
+      };
+      reader.readAsText(csvFile);
+    } catch (error) {
+      console.error('Error importing CSV:', error);
+      toast.error('Failed to import CSV file');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Handle CSV export
+  const handleExportCSV = () => {
+    if (filteredInventory.length === 0) {
+      toast.error('No inventory data to export');
+      return;
+    }
+
+    try {
+      // Define CSV headers
+      const headers = [
+        'drug_name',
+        'current_stock',
+        'unit_of_measure',
+        'reorder_level',
+        'expiry_date',
+        'batch_number',
+        'date_received',
+        'unit_cost',
+        'selling_price',
+        'status'
+      ];
+
+      // Convert inventory data to CSV format
+      const csvData = filteredInventory.map(item => [
+        item.drug_name,
+        item.current_stock,
+        item.unit_of_measure || 'Tablets',
+        item.reorder_level,
+        item.expiry_date || '',
+        item.batch_number || '',
+        item.date_received || '',
+        item.unit_cost || '0.00',
+        item.selling_price || '0.00',
+        item.current_stock <= item.reorder_level ? 'Low Stock' : 
+        (item.expiry_date && new Date(item.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)) ? 'Expiring' : 'In Stock'
+      ]);
+
+      // Create CSV content
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map(row => row.map(field => 
+          // Escape fields that contain commas or quotes
+          typeof field === 'string' && (field.includes(',') || field.includes('"')) 
+            ? `"${field.replace(/"/g, '""')}"` 
+            : field
+        ).join(','))
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filename = searchQuery 
+        ? `pharmacy_inventory_filtered_${currentDate}.csv`
+        : `pharmacy_inventory_${currentDate}.csv`;
+      
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${filteredInventory.length} items to CSV`);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      toast.error('Failed to export CSV file');
+    }
+  };
+
+  // Filter patients based on search query
+  const filteredPatients = patients.filter(patient => {
+    if (!patientSearchQuery) return true;
+    const searchLower = patientSearchQuery.toLowerCase();
+    return (
+      patient.fullName?.toLowerCase().includes(searchLower) ||
+      patient.patientId?.toLowerCase().includes(searchLower) ||
+      patient.phoneNumber?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Handle patient selection from dropdown
+  const handlePatientSelect = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setPatientSearchQuery(patient.fullName || '');
+    setShowPatientDropdown(false);
+  };
+
+  // Handle dispense medicine
+  const handleDispenseMedicine = () => {
+    setShowDispenseModal(true);
+    setSelectedPatient(null);
+    setIsWalkInClient(false);
+    setWalkInClientName('');
+    setDispensingItems([]);
+    setShowPaymentStep(false);
+    setPaymentMethod('cash');
+    setPaymentAmount('');
+    setPaymentReceived(false);
+    setPatientSearchQuery('');
+    setShowPatientDropdown(false);
+    setShowReceipt(false);
+    setLastReceipt(null);
+  };
+
+  // Handle proceed to payment
+  const handleProceedToPayment = () => {
+    if (dispensingItems.length === 0) {
+      toast.error('Please add items to dispense');
+      return;
+    }
+    if (!isWalkInClient && !selectedPatient) {
+      toast.error('Please select a patient or choose walk-in client');
+      return;
+    }
+    if (isWalkInClient && !walkInClientName.trim()) {
+      toast.error('Please enter walk-in client name');
+      return;
+    }
+
+    const totalAmount = dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    setPaymentAmount(totalAmount.toFixed(2));
+    setShowPaymentStep(true);
+  };
+
+  // Handle payment confirmation
+  const handlePaymentConfirmation = () => {
+    const totalAmount = dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const receivedAmount = parseFloat(paymentAmount);
+
+    if (receivedAmount < totalAmount) {
+      toast.error('Payment amount is insufficient');
+      return;
+    }
+
+    setPaymentReceived(true);
+    toast.success('Payment received successfully');
+  };
+
+  // Add item to dispensing list
+  const addItemToDispensing = (item: DrugInventory) => {
+    const existingItem = dispensingItems.find(di => di.inventoryId === item.id);
+    if (existingItem) {
+      toast.error('Item already added to dispensing list');
+      return;
+    }
+
+    const unitPrice = parseFloat(item.selling_price?.toString() || '0');
+    const newItem = {
+      inventoryId: item.id,
+      drugName: item.drug_name,
+      quantity: 1,
+      unitPrice: unitPrice,
+      totalPrice: unitPrice,
+      availableStock: item.current_stock
+    };
+
+    setDispensingItems([...dispensingItems, newItem]);
+  };
+
+  // Update dispensing item quantity
+  const updateDispensingQuantity = (inventoryId: string, quantity: number) => {
+    setDispensingItems(items => 
+      items.map(item => 
+        item.inventoryId === inventoryId 
+          ? { ...item, quantity, totalPrice: item.unitPrice * quantity }
+          : item
+      )
+    );
+  };
+
+  // Remove item from dispensing list
+  const removeDispensingItem = (inventoryId: string) => {
+    setDispensingItems(items => items.filter(item => item.inventoryId !== inventoryId));
+  };
+
+  // Handle dispensing submission
+  const handleDispenseSubmit = async () => {
+    if (!user?.clinic) return;
+    if (dispensingItems.length === 0) {
+      toast.error('Please add items to dispense');
+      return;
+    }
+    if (!isWalkInClient && !selectedPatient) {
+      toast.error('Please select a patient or choose walk-in client');
+      return;
+    }
+    if (isWalkInClient && !walkInClientName.trim()) {
+      toast.error('Please enter walk-in client name');
+      return;
+    }
+
+    try {
+      setDispensing(true);
+
+      // Check stock availability
+      for (const item of dispensingItems) {
+        const inventoryItem = inventory.find(inv => inv.id === item.inventoryId);
+        if (!inventoryItem || inventoryItem.current_stock < item.quantity) {
+          toast.error(`Insufficient stock for ${item.drugName}`);
+          return;
+        }
+      }
+
+      // Calculate totals
+      const totalAmount = dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+      const patientId = isWalkInClient ? `WALK-IN-${Date.now()}` : selectedPatient?.patientId;
+      const patientName = isWalkInClient ? walkInClientName.trim() : selectedPatient?.fullName;
+
+      // Prepare pharmacy services
+      const pharmacyServices = dispensingItems.map(item => ({
+        serviceName: item.drugName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        serviceType: 'pharmacy'
+      }));
+
+      let bill;
+
+      // Debug logging
+      console.log('Dispensing for patient:', { patientId, patientName, clinicId: user.clinic });
+      
+      // Check for existing active bill for this patient
+      const existingBill = await pharmacyApi.findActivePatientBill(patientId, user.clinic);
+      console.log('Found existing bill:', existingBill);
+
+      if (existingBill) {
+        // Add services to existing bill
+        console.log('Adding services to existing bill:', existingBill.id);
+        console.log('Existing bill services count:', existingBill.services?.length || 0);
+        bill = await pharmacyApi.addServicesToBill(existingBill.id, pharmacyServices);
+        console.log('Updated bill after adding services:', bill);
+        toast.success(`Services added to existing bill #${existingBill.bill_number}`);
+      } else {
+        // Create new bill with status 'active' instead of 'paid'
+        console.log('Creating new bill for patient:', patientId);
+        const billData = {
+          patient_id: patientId,
+          patient_name: patientName,
+          clinic_id: parseInt(user.clinic),
+          services: pharmacyServices,
+          total_amount: totalAmount,
+          paid_amount: totalAmount, // Require full payment before dispensing
+          balance_amount: 0,
+          status: 'pending', // Use pending status for new bills
+          bill_date: new Date().toISOString(),
+          created_by: user.displayName || user.uid || 'system'
+        };
+
+        bill = await pharmacyApi.createOrUpdatePatientBill(billData);
+        toast.success(`New bill created #${bill.bill_number}`);
+      }
+
+      // Create visit and dispensing records for both registered patients and walk-in clients
+      let actualPatientId = selectedPatient?.id;
+      
+      // For walk-in clients, create a temporary patient record
+      if (isWalkInClient) {
+        const walkInPatientData = {
+          patient_id: `WALK-${Date.now().toString().slice(-8)}`,
+          first_name: walkInClientName.trim(),
+          last_name: 'Walk-in',
+          date_of_birth: '1900-01-01',
+          gender: 'other',
+          contact_number: 'N/A',
+          clinic_id: parseInt(user.clinic),
+          registration_date: new Date().toISOString()
+        };
+        
+        const patientResponse = await fetch('/api/patients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(walkInPatientData)
+        });
+        
+        if (patientResponse.ok) {
+          const createdPatient = await patientResponse.json();
+          actualPatientId = createdPatient.id;
+        }
+      }
+      
+      if (actualPatientId) {
+        // Create a visit record for the dispensing (required by foreign key)
+        const visitData = {
+          patient_id: actualPatientId,
+          visit_date: new Date().toISOString(),
+          clinic_id: parseInt(user.clinic),
+          status: 'completed',
+          chief_complaint: isWalkInClient ? 'Walk-in pharmacy dispensing' : 'Pharmacy dispensing'
+        };
+        
+        const visitResponse = await fetch('/api/visits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(visitData)
+        });
+        
+        if (!visitResponse.ok) {
+          throw new Error('Failed to create visit record');
+        }
+        
+        const visit = await visitResponse.json();
+        
+        // Create dispensing records for each item
+        for (const item of dispensingItems) {
+          // Get the actual unit of measure from inventory
+          const inventoryItem = inventory.find(inv => inv.id === item.inventoryId);
+          const unitOfMeasure = inventoryItem?.unit_of_measure || 'units';
+          
+          const dispensingRecord = {
+            drug_id: item.inventoryId,
+            patient_id: actualPatientId,
+            visit_id: visit.id,
+            prescription_id: null,
+            quantity_dispensed: item.quantity,
+            unit_of_measure: unitOfMeasure,
+            dosage: null,
+            frequency: null,
+            duration: null,
+            instructions: null,
+            dispensed_at: new Date().toISOString(),
+            dispensed_by: user?.uid || user?.id || 'system',
+            clinic_id: parseInt(user.clinic),
+            status: 'dispensed'
+          };
+          
+          await pharmacyApi.addDispensingRecord(dispensingRecord);
+        }
+      }
+
+      // Update inventory stock only after successful bill creation
+      for (const item of dispensingItems) {
+        const inventoryItem = inventory.find(inv => inv.id === item.inventoryId);
+        if (inventoryItem) {
+          const updatedStock = {
+            current_stock: inventoryItem.current_stock - item.quantity
+          };
+          await pharmacyApi.updateInventoryItem(item.inventoryId, updatedStock);
+        }
+      }
+
+      // Create receipt record for pharmacy payment
+      try {
+        // Calculate the correct service indexes based on the updated bill
+        const billServices = bill.services || [];
+        console.log('Bill services for receipt indexing:', billServices);
+        
+        // Find the indexes of the newly added pharmacy services
+        const paidServiceIndexes = [];
+        const serviceDetails = [];
+        
+        // If we added to existing bill, the new services are at the end
+        if (existingBill) {
+          const startIndex = existingBill.services?.length || 0;
+          console.log('New services start at index:', startIndex);
+          
+          dispensingItems.forEach((item, itemIndex) => {
+            const serviceIndex = startIndex + itemIndex;
+            paidServiceIndexes.push(serviceIndex.toString());
+            serviceDetails.push({
+              index: serviceIndex,
+              serviceName: item.drugName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              department: 'Pharmacy'
+            });
+          });
+        } else {
+          // For new bill, services start at index 0
+          dispensingItems.forEach((item, itemIndex) => {
+            paidServiceIndexes.push(itemIndex.toString());
+            serviceDetails.push({
+              index: itemIndex,
+              serviceName: item.drugName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              department: 'Pharmacy'
+            });
+          });
+        }
+        
+        console.log('Calculated paid service indexes:', paidServiceIndexes);
+        console.log('Service details for receipt:', serviceDetails);
+        console.log('Final bill services after adding pharmacy items:', bill.services);
+        
+        const receiptData = {
+          bill_id: bill.id,
+          patient_id: patientId,
+          patient_name: patientName,
+          clinic_id: parseInt(user.clinic),
+          payment_amount: totalAmount,
+          payment_method: paymentMethod,
+          payment_date: new Date().toISOString(),
+          paid_services: paidServiceIndexes,
+          service_details: serviceDetails,
+          notes: `Pharmacy dispensing - ${dispensingItems.length} items`,
+          from_lease: false,
+          cashier_name: user?.displayName || 'Unknown',
+          cashier_id: user?.uid || user?.id,
+          status: 'active'
+        };
+
+        const createdReceipt = await pharmacyApi.createPharmacyReceipt(receiptData);
+        console.log('Pharmacy receipt created successfully', createdReceipt);
+        console.log('Receipt data sent to API:', receiptData);
+        
+        // Store receipt data for display
+        const receiptForDisplay = {
+          ...receiptData,
+          receipt_number: createdReceipt.receipt_number || `RCP-${Date.now().toString().slice(-8)}`,
+          bill_number: bill.bill_number || bill.billNumber,
+          dispensingItems: dispensingItems
+        };
+        
+        console.log('Setting receipt data for display:', receiptForDisplay);
+        setLastReceipt(receiptForDisplay);
+        
+      } catch (receiptError) {
+        console.error('Error creating pharmacy receipt:', receiptError);
+        // Don't fail the dispensing if receipt creation fails
+        
+        // Recalculate service indexes for fallback (since variables are in try block)
+        const fallbackPaidServiceIndexes = [];
+        const fallbackServiceDetails = [];
+        
+        if (existingBill) {
+          const startIndex = existingBill.services?.length || 0;
+          dispensingItems.forEach((item, itemIndex) => {
+            const serviceIndex = startIndex + itemIndex;
+            fallbackPaidServiceIndexes.push(serviceIndex.toString());
+            fallbackServiceDetails.push({
+              index: serviceIndex,
+              serviceName: item.drugName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              department: 'Pharmacy'
+            });
+          });
+        } else {
+          dispensingItems.forEach((item, itemIndex) => {
+            fallbackPaidServiceIndexes.push(itemIndex.toString());
+            fallbackServiceDetails.push({
+              index: itemIndex,
+              serviceName: item.drugName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              department: 'Pharmacy'
+            });
+          });
+        }
+        
+        // Still create receipt data for display even if API fails
+        const fallbackReceipt = {
+          bill_id: bill.id,
+          patient_id: patientId,
+          patient_name: patientName,
+          clinic_id: parseInt(user.clinic),
+          payment_amount: totalAmount,
+          payment_method: paymentMethod,
+          payment_date: new Date().toISOString(),
+          paid_services: fallbackPaidServiceIndexes,
+          service_details: fallbackServiceDetails,
+          notes: `Pharmacy dispensing - ${dispensingItems.length} items`,
+          from_lease: false,
+          cashier_name: user?.displayName || 'Unknown',
+          cashier_id: user?.uid || user?.id,
+          status: 'active',
+          receipt_number: `RCP-${Date.now().toString().slice(-8)}`,
+          bill_number: bill.bill_number || bill.billNumber,
+          dispensingItems: dispensingItems
+        };
+        console.log('Using fallback receipt data:', fallbackReceipt);
+        setLastReceipt(fallbackReceipt);
+      }
+
+      toast.success(`Medicine dispensed successfully. Payment of SSP ${totalAmount.toFixed(2)} received. Bill #${bill.bill_number || bill.billNumber}`);
+      
+      console.log('About to close dispense modal and show receipt');
+      setShowDispenseModal(false);
+      
+      // Add a small delay to ensure modal state updates properly
+      setTimeout(() => {
+        console.log('Setting showReceipt to true');
+        setShowReceipt(true);
+      }, 100);
+      
+      fetchData(); // Refresh inventory
+    } catch (error) {
+      console.error('Error dispensing medicine:', error);
+      toast.error('Failed to dispense medicine');
+    } finally {
+      setDispensing(false);
+    }
+  };
+
+  // Handle print receipt
+  const handlePrintReceipt = () => {
+    if (!lastReceipt) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print the receipt');
+      return;
+    }
+
+    const currentDate = new Date();
+    const receiptId = lastReceipt.receipt_number;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Payment Receipt</title>
+        <style>
+          @media print {
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: 'Courier New', monospace;
+              font-size: 12px;
+              line-height: 1.2;
+            }
+            .thermal-receipt {
+              width: 80mm !important;
+              max-width: none !important;
+            }
+          }
+          body {
+            margin: 0;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="thermal-receipt" style="
+          width: 100%;
+          max-width: 302px;
+          font-family: monospace;
+          font-size: 11px;
+          line-height: 1.3;
+          color: #000;
+          background-color: #fff;
+          padding: 12px;
+          margin: 0 auto;
+          box-sizing: border-box;
+        ">
+          <!-- Header -->
+          <div style="text-align: center; margin-bottom: 12px;">
+            <div style="font-size: 16px; font-weight: bold; margin-bottom: 2px;">
+              UNIVERSAL HOSPITAL
+            </div>
+            <div style="font-size: 9px; margin-bottom: 1px; color: #666;">
+              Hai Jerusalem, Juba, South Sudan
+            </div>
+            <div style="font-size: 9px; margin-bottom: 1px; color: #666;">
+              Tel: 0922123463
+            </div>
+            <div style="font-size: 9px; margin-bottom: 6px; color: #666;">
+              Email: info@universalhospital.com
+            </div>
+            <div style="font-size: 11px; font-weight: bold; margin-bottom: 2px;">
+              PHARMACY RECEIPT
+            </div>
+            <div style="font-size: 10px;">
+              ${currentDate.toLocaleDateString('en-GB')} ${currentDate.toLocaleTimeString('en-GB')}
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+          <!-- Receipt Info -->
+          <div style="margin-bottom: 12px; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Receipt No:</span>
+              <span style="font-weight: bold;">${receiptId}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Bill No:</span>
+              <span>${lastReceipt.bill_number}</span>
+            </div>
+          </div>
+
+          <!-- Patient Info -->
+          <div style="margin-bottom: 12px; font-size: 11px;">
+            <div style="font-weight: bold; margin-bottom: 2px;">PATIENT DETAILS:</div>
+            <div>Name: ${lastReceipt.patient_name}</div>
+            <div>ID: ${lastReceipt.patient_id}</div>
+            <div>Date: ${new Date(lastReceipt.payment_date).toLocaleDateString('en-GB')}</div>
+          </div>
+
+          <!-- Divider -->
+          <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+          <!-- Medications -->
+          <div style="margin-bottom: 12px; font-size: 10px;">
+            <div style="font-weight: bold; margin-bottom: 4px;">MEDICATIONS:</div>
+            ${lastReceipt.dispensingItems ? 
+              lastReceipt.dispensingItems.map((item: any) => `
+                <div style="margin-bottom: 3px;">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="flex: 1; padding-right: 4px;">
+                      ${item.drugName}
+                    </span>
+                    <span style="min-width: 60px; text-align: right;">
+                      SSP ${item.totalPrice.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style="font-size: 9px; color: #666; padding-left: 4px;">
+                    ${item.quantity} x SSP ${item.unitPrice.toFixed(2)}
+                  </div>
+                </div>
+              `).join('') : 
+              '<div>No medication details available</div>'
+            }
+          </div>
+
+          <!-- Divider -->
+          <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+          <!-- Payment Details -->
+          <div style="margin-bottom: 12px; font-size: 11px;">
+            <div style="font-weight: bold; margin-bottom: 2px;">PAYMENT DETAILS:</div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Method:</span>
+              <span style="text-transform: capitalize;">${lastReceipt.payment_method}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Date:</span>
+              <span>${new Date(lastReceipt.payment_date).toLocaleDateString('en-GB')}</span>
+            </div>
+            <div style="border-top: 1px solid #000; padding-top: 2px; margin-top: 4px;">
+              <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                <span>TOTAL AMOUNT:</span>
+                <span>SSP ${lastReceipt.payment_amount.toFixed(2)}</span>
+              </div>
+            </div>
+            ${lastReceipt.notes ? `
+              <div style="margin-top: 4px;">
+                <div style="font-weight: bold; font-size: 10px;">Notes:</div>
+                <div style="font-size: 9px; word-wrap: break-word;">
+                  ${lastReceipt.notes}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Divider -->
+          <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+          <!-- Cashier Information -->
+          ${lastReceipt.cashier_name ? `
+            <div style="margin-bottom: 12px; font-size: 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                <span style="font-weight: bold;">DISPENSED BY:</span>
+                <span style="font-weight: bold;">${lastReceipt.cashier_name}</span>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Divider -->
+          <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
+
+          <!-- Footer -->
+          <div style="text-align: center; font-size: 10px; margin-top: 12px;">
+            <div style="margin-bottom: 4px;">
+              Thank you for your payment!
+            </div>
+            <div style="font-size: 9px; color: #666;">
+              Keep this receipt for your records
+            </div>
+            <div style="font-size: 9px; color: #666; margin-top: 4px;">
+              Department: Pharmacy
+            </div>
+          </div>
+
+          <!-- Bottom spacing for tear-off -->
+          <div style="height: 20px;"></div>
+        </div>
+        
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() {
+              window.close();
+            }, 1000);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    setLastReceipt(null);
+  };
+
+  useEffect(() => {
+    if (user?.clinic) {
+      fetchData();
+    }
+  }, [user?.clinic]);
+
+  const fetchData = async () => {
+    if (!user?.clinic) return;
+    
+    setLoading(true);
+    try {
+      const [inventoryData, dispensingData, patientsData] = await Promise.all([
+        pharmacyApi.getInventory(user.clinic),
+        pharmacyApi.getDispensingHistory(user.clinic),
+        pharmacyApi.getPatients(user.clinic)
+      ]);
+      
+      setInventory(inventoryData);
+      setDispensingHistory(Array.isArray(dispensingData) ? dispensingData : []);
+      
+      // Extract unique dispensers for filter
+      const dispensers = Array.isArray(dispensingData) 
+        ? [...new Set(dispensingData.map((d: any) => d.dispensed_by_name || d.dispensed_by).filter(Boolean))]
+        : [];
+      setUniqueDispensers(dispensers);
+      
+      // Transform patient data to match expected structure
+      const transformedPatients = patientsData.map((patient: any) => {
+        const firstName = patient.first_name || '';
+        const lastName = patient.last_name || '';
+        const fullName = firstName && lastName 
+          ? `${firstName} ${lastName}`.trim()
+          : firstName || lastName || patient.full_name || patient.name || 'Unknown Patient';
+        
+        return {
+          id: patient.id,
+          patientId: patient.patient_id,
+          fullName: fullName.trim(),
+          firstName: firstName,
+          lastName: lastName,
+          age: patient.age || 0,
+          phoneNumber: patient.phone || patient.phone_number || '',
+          clinic: user.clinic
+        };
+      });
+      
+      console.log('Transformed patients:', transformedPatients);
+      setPatients(transformedPatients);
+    } catch (error) {
+      console.error('Error fetching pharmacy data:', error);
+      toast.error('Failed to load pharmacy data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.clinic) return;
+
+    try {
+      setSaving(true);
+      
+      // Prepare data to match DrugInventory model requirements
+      const stockData = {
+        drug_name: newStock.drug_name.trim(),
+        generic_name: newStock.generic_name.trim() || null,
+        unit_of_measure: newStock.unit_of_measure,
+        quantity_received: parseInt(newStock.current_stock), // Use current_stock as quantity_received
+        current_stock: parseInt(newStock.current_stock),
+        expiry_date: newStock.expiry_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default to 1 year from now if not provided
+        batch_number: newStock.batch_number,
+        reorder_level: parseInt(newStock.reorder_level),
+        clinic_id: parseInt(user.clinic),
+        date_received: newStock.date_received,
+        received_by: user.uid || user.id || 'system', // Use user ID
+        unit_cost: newStock.unit_cost ? parseFloat(newStock.unit_cost) : 0,
+        selling_price: newStock.selling_price ? parseFloat(newStock.selling_price) : 0
+      };
+
+      console.log('Sending stock data:', stockData);
+      
+      if (isEditMode && editingItem) {
+        // Update existing item
+        await pharmacyApi.updateInventoryItem(editingItem.id, stockData);
+        toast.success('Stock updated successfully');
+      } else {
+        // Add new item
+        await pharmacyApi.addInventoryItem(stockData);
+        toast.success('Stock added successfully');
+      }
+      
+      setShowAddStock(false);
+      setIsEditMode(false);
+      setEditingItem(null);
+      setNewStock({
+        drug_name: '',
+        generic_name: '',
+        current_stock: '',
+        unit_of_measure: 'Tablets',
+        reorder_level: '',
+        expiry_date: '',
+        batch_number: '',
+        date_received: new Date().toISOString().split('T')[0],
+        unit_cost: '',
+        margin_percentage: '',
+        selling_price: ''
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error saving stock:', error);
+      toast.error(`Failed to ${isEditMode ? 'update' : 'add'} stock. Please check all required fields.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredInventory = inventory.filter(item =>
+    item.drug_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const lowStockItems = inventory.filter(item => 
+    item.current_stock <= item.reorder_level
+  );
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Loading pharmacy data...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Pharmacy Management</h1>
+            <p className="text-muted-foreground">Complete medication inventory and dispensing system</p>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Items</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{inventory.length}</div>
+              <p className="text-xs text-muted-foreground">Active medications in stock</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Low Stock Alerts</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">{lowStockItems.length}</div>
+              <p className="text-xs text-muted-foreground">Items below reorder level</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Expiring Soon</CardTitle>
+              <Bell className="h-4 w-4 text-red-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">5</div>
+              <p className="text-xs text-muted-foreground">Items expiring within 3 months</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Dispensing</CardTitle>
+              <Pill className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {Array.isArray(dispensingHistory) ? dispensingHistory.filter(d => 
+                  new Date(d.date || '').toDateString() === new Date().toDateString()
+                ).length : 0}
+              </div>
+              <p className="text-xs text-muted-foreground">Medications dispensed today</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="inventory" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="inventory" className="flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Inventory
+            </TabsTrigger>
+            <TabsTrigger value="prescriptions" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Prescriptions (0)
+            </TabsTrigger>
+            <TabsTrigger value="dispensing-report" className="flex items-center gap-2">
+              <Pill className="w-4 h-4" />
+              Dispensing Report
+            </TabsTrigger>
+            <TabsTrigger value="inventory-report" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Inventory Report
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className="flex items-center gap-2">
+              <Bell className="w-4 h-4" />
+              Alerts (25)
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="inventory" className="space-y-4">
+            {/* Drug Inventory Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Drug Inventory</h2>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center space-x-2">
+                  <Search className="w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search drugs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowImportModal(true)}>
+                    <Upload className="w-4 h-4" />
+                    Import CSV
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={handleExportCSV}>
+                    <Download className="w-4 h-4" />
+                    Export
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={handleDispenseMedicine}>
+                    <Pill className="w-4 h-4" />
+                    Dispense Medicine
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Package className="w-4 h-4" />
+                    Accept Return
+                  </Button>
+                  <Button size="sm" className="gap-2" onClick={handleAddNewItem}>
+                    <Plus className="w-4 h-4" />
+                    Add Stock
+                  </Button>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+                {filteredInventory.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                      <Package className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      {searchQuery ? 'No drugs found' : 'No drugs in inventory'}
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      {searchQuery 
+                        ? 'Try adjusting your search terms or clear the search to see all drugs.'
+                        : 'Get started by adding your first drug to inventory.'
+                      }
+                    </p>
+                    {!searchQuery && (
+                      <Button onClick={handleAddNewItem} className="mt-2">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add First Drug
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+                    <table className="w-full">
+                      <thead className="bg-background border-b border-border sticky top-0 z-10">
+                        <tr>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Drug Name</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Generic Name</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Current Stock</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Unit</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Reorder Level</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Expiry Date</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Batch Number</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Received Date</th>
+                          <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Status</th>
+                          <th className="text-right py-3 px-4 font-semibold text-sm text-foreground">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredInventory.map((item, index) => (
+                          <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="font-semibold text-foreground">{item.drug_name}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground">{item.generic_name || '-'}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="font-medium text-foreground">{item.current_stock}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground">{item.unit_of_measure}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground">{item.reorder_level}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground">
+                                {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                }) : 'N/A'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground font-mono">
+                                {item.batch_number || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-muted-foreground">
+                                {item.date_received ? new Date(item.date_received).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                }) : 'N/A'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              {item.current_stock <= item.reorder_level ? (
+                                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Low Stock</Badge>
+                              ) : new Date(item.expiry_date || '') < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) ? (
+                                <Badge variant="destructive">Expiring</Badge>
+                              ) : (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800">In Stock</Badge>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="hover:bg-muted/50"
+                                onClick={() => handleEditItem(item)}
+                                title="Edit Item"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="prescriptions" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Prescriptions</CardTitle>
+                <CardDescription>Manage patient prescriptions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  No prescriptions available
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="dispensing-report" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dispensing Report</CardTitle>
+                <CardDescription>Track medication dispensing activities</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Filters and Export */}
+                <div className="mb-4 flex flex-wrap gap-4 items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <Label className="text-sm font-medium mb-2">From Date</Label>
+                    <Input
+                      type="date"
+                      value={dispensingDateRange.from}
+                      onChange={(e) => setDispensingDateRange({ ...dispensingDateRange, from: e.target.value })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <Label className="text-sm font-medium mb-2">To Date</Label>
+                    <Input
+                      type="date"
+                      value={dispensingDateRange.to}
+                      onChange={(e) => setDispensingDateRange({ ...dispensingDateRange, to: e.target.value })}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <Label className="text-sm font-medium mb-2">Dispensed By</Label>
+                    <select
+                      value={dispensingUserFilter}
+                      onChange={(e) => setDispensingUserFilter(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                    >
+                      <option value="all">All Users</option>
+                      {uniqueDispensers.map(dispenser => (
+                        <option key={dispenser} value={dispenser}>{dispenser}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setDispensingDateRange({ from: '', to: '' });
+                      setDispensingUserFilter('all');
+                    }}
+                    variant="outline"
+                    className="gap-2"
+                  >
+                    Clear Filters
+                  </Button>
+                  <Button
+                    onClick={handleExportDispensingReport}
+                    className="gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </Button>
+                </div>
+
+                {(() => {
+                  // Apply filters
+                  const filteredHistory = dispensingHistory.filter((record: any) => {
+                    // Date range filter
+                    if (dispensingDateRange.from || dispensingDateRange.to) {
+                      const recordDate = new Date(record.dispensed_at);
+                      if (dispensingDateRange.from) {
+                        const fromDate = new Date(dispensingDateRange.from);
+                        if (recordDate < fromDate) return false;
+                      }
+                      if (dispensingDateRange.to) {
+                        const toDate = new Date(dispensingDateRange.to);
+                        toDate.setHours(23, 59, 59, 999);
+                        if (recordDate > toDate) return false;
+                      }
+                    }
+                    
+                    // User filter
+                    if (dispensingUserFilter !== 'all') {
+                      const dispensedBy = record.dispensed_by_name || record.dispensed_by;
+                      if (dispensedBy !== dispensingUserFilter) return false;
+                    }
+                    
+                    return true;
+                  });
+
+                  return filteredHistory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No dispensing records found
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 border-b">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Date</th>
+                          <th className="text-left p-3 font-medium">Patient Name</th>
+                          <th className="text-left p-3 font-medium">Drug Name</th>
+                          <th className="text-left p-3 font-medium">Quantity</th>
+                          <th className="text-left p-3 font-medium">Unit</th>
+                          <th className="text-left p-3 font-medium">Dispensed By</th>
+                          <th className="text-left p-3 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {dispensingHistory.map((record: any) => {
+                          const patientName = record.first_name || record.last_name
+                            ? `${record.first_name || ''} ${record.last_name || ''}`.trim()
+                            : record.patient_id || '-';
+                          
+                          return (
+                            <tr key={record.id} className="hover:bg-muted/20">
+                              <td className="p-3">
+                                {record.dispensed_at ? new Date(record.dispensed_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                }) : '-'}
+                              </td>
+                              <td className="p-3 font-medium">{patientName}</td>
+                              <td className="p-3">{record.drug_name || record.drug_id || '-'}</td>
+                              <td className="p-3">{record.quantity_dispensed || 0}</td>
+                              <td className="p-3">{record.unit_of_measure || '-'}</td>
+                              <td className="p-3">{record.dispensed_by_name || record.dispensed_by || '-'}</td>
+                              <td className="p-3">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  record.status === 'dispensed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {record.status || 'completed'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="inventory-report" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Inventory Report</CardTitle>
+                <CardDescription>Detailed inventory analytics and reports</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  Inventory report will be displayed here
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="alerts" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Alerts</CardTitle>
+                <CardDescription>Low stock and expiry alerts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  Alert notifications will be displayed here
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Add Stock Modal */}
+        <Dialog open={showAddStock} onOpenChange={setShowAddStock}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {isEditMode ? (
+                  <>
+                    <Edit className="w-5 h-5 text-primary" />
+                    Edit Stock Item
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 text-primary" />
+                    Add New Stock
+                  </>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <form onSubmit={handleAddStock} className="space-y-4">
+              {/* Drug Name */}
+              <div className="form-field">
+                <Label className="form-label">Drug Name *</Label>
+                <Input
+                  value={newStock.drug_name}
+                  onChange={(e) => setNewStock({...newStock, drug_name: e.target.value})}
+                  placeholder="Enter drug name"
+                  className="h-9"
+                  required
+                />
+              </div>
+
+              {/* Generic Name */}
+              <div className="form-field">
+                <Label className="form-label">Generic Name</Label>
+                <Input
+                  value={newStock.generic_name}
+                  onChange={(e) => setNewStock({...newStock, generic_name: e.target.value})}
+                  placeholder="Enter generic name"
+                  className="h-9"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="form-field">
+                  <Label className="form-label">Current Stock *</Label>
+                  <Input
+                    type="number"
+                    value={newStock.current_stock}
+                    onChange={(e) => setNewStock({...newStock, current_stock: e.target.value})}
+                    placeholder="Enter current stock"
+                    className="h-9"
+                    required
+                  />
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Unit of Measure</Label>
+                  <select
+                    value={newStock.unit_of_measure}
+                    onChange={(e) => setNewStock({...newStock, unit_of_measure: e.target.value})}
+                    className="w-full h-9 px-3 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                  >
+                    <option value="Tablets">Tablets</option>
+                    <option value="Capsules">Capsules</option>
+                    <option value="Strips">Strips</option>
+                    <option value="Sachets">Sachets</option>
+                    <option value="Bottles">Bottles</option>
+                    <option value="Vials">Vials</option>
+                    <option value="Ampoules">Ampoules</option>
+                    <option value="Tubes">Tubes</option>
+                    <option value="Boxes">Boxes</option>
+                    <option value="Packs">Packs</option>
+                    <option value="Rolls">Rolls</option>
+                    <option value="Pieces">Pieces</option>
+                    <option value="Units">Units</option>
+                    <option value="Drops">Drops</option>
+                    <option value="Sprays">Sprays</option>
+                    <option value="Patches">Patches</option>
+                    <option value="Injections">Injections</option>
+                    <option value="Syringes">Syringes</option>
+                    <option value="ml">ml (milliliters)</option>
+                    <option value="L">L (liters)</option>
+                    <option value="mg">mg (milligrams)</option>
+                    <option value="g">g (grams)</option>
+                    <option value="kg">kg (kilograms)</option>
+                    <option value="mcg">mcg (micrograms)</option>
+                    <option value="IU">IU (International Units)</option>
+                    <option value="mEq">mEq (milliequivalents)</option>
+                  </select>
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Reorder Level *</Label>
+                  <Input
+                    type="number"
+                    value={newStock.reorder_level}
+                    onChange={(e) => setNewStock({...newStock, reorder_level: e.target.value})}
+                    placeholder="Minimum stock level"
+                    className="h-9"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="form-field">
+                  <Label className="form-label">Expiry Date</Label>
+                  <Input
+                    type="date"
+                    value={newStock.expiry_date}
+                    onChange={(e) => setNewStock({...newStock, expiry_date: e.target.value})}
+                    className="h-9"
+                  />
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Batch Number</Label>
+                  <Input
+                    value={newStock.batch_number || ''}
+                    onChange={(e) => setNewStock({...newStock, batch_number: e.target.value})}
+                    placeholder="Auto-generated"
+                    readOnly
+                    className="bg-muted/50 h-9"
+                  />
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Received Date</Label>
+                  <Input
+                    type="date"
+                    value={newStock.date_received || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setNewStock({...newStock, date_received: e.target.value})}
+                    className="h-9"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="form-field">
+                  <Label className="form-label">Unit Cost ($) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newStock.unit_cost}
+                    onChange={(e) => {
+                      const newCost = e.target.value;
+                      const calculatedPrice = calculateSellingPrice(newCost, newStock.margin_percentage);
+                      setNewStock({
+                        ...newStock, 
+                        unit_cost: newCost,
+                        selling_price: calculatedPrice
+                      });
+                    }}
+                    placeholder="0.00"
+                    className="h-9"
+                    required
+                  />
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Margin %</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={newStock.margin_percentage}
+                    onChange={(e) => {
+                      const newMargin = e.target.value;
+                      const calculatedPrice = calculateSellingPrice(newStock.unit_cost, newMargin);
+                      setNewStock({
+                        ...newStock, 
+                        margin_percentage: newMargin,
+                        selling_price: calculatedPrice
+                      });
+                    }}
+                    placeholder="e.g., 25"
+                    className="h-9"
+                  />
+                </div>
+                <div className="form-field">
+                  <Label className="form-label">Selling Price ($) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={newStock.selling_price}
+                    onChange={(e) => {
+                      const newPrice = e.target.value;
+                      const calculatedMargin = calculateMarginPercentage(newStock.unit_cost, newPrice);
+                      setNewStock({
+                        ...newStock, 
+                        selling_price: newPrice,
+                        margin_percentage: calculatedMargin
+                      });
+                    }}
+                    placeholder="Auto-calculated"
+                    className="h-9"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAddStock(false)}
+                  className="flex-1"
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {isEditMode ? 'Updating...' : 'Adding...'}
+                    </>
+                  ) : (
+                    <>
+                      {isEditMode ? (
+                        <>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Update Stock
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Stock
+                        </>
+                      )}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* CSV Import Modal */}
+        <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+          <DialogContent className="sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-primary" />
+                Import Inventory from CSV
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              {/* Template Download Section */}
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-foreground">Need a template?</h3>
+                    <p className="text-sm text-muted-foreground">Download our CSV template to get started</p>
+                  </div>
+                  <Button variant="outline" onClick={downloadTemplate} className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Download Template
+                  </Button>
+                </div>
+              </div>
+
+              {/* File Upload Section */}
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">Select CSV File</Label>
+                  <div className="mt-2">
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileSelect}
+                      className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                    />
+                  </div>
+                  {csvFile && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Selected: {csvFile.name}
+                    </p>
+                  )}
+                </div>
+
+                {/* Preview Section */}
+                {importPreview.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Preview (First 5 rows)</Label>
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-2 font-medium">Drug Name</th>
+                              <th className="text-left p-2 font-medium">Stock</th>
+                              <th className="text-left p-2 font-medium">Unit</th>
+                              <th className="text-left p-2 font-medium">Reorder Level</th>
+                              <th className="text-left p-2 font-medium">Unit Cost</th>
+                              <th className="text-left p-2 font-medium">Selling Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {importPreview.map((row, index) => (
+                              <tr key={index} className="hover:bg-muted/20">
+                                <td className="p-2">{row.drug_name || '-'}</td>
+                                <td className="p-2">{row.current_stock || '-'}</td>
+                                <td className="p-2">{row.unit_of_measure || '-'}</td>
+                                <td className="p-2">{row.reorder_level || '-'}</td>
+                                <td className="p-2">{row.unit_cost || '-'}</td>
+                                <td className="p-2">{row.selling_price || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setCsvFile(null);
+                    setImportPreview([]);
+                  }}
+                  className="flex-1"
+                  disabled={importing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleImportCSV}
+                  className="flex-1"
+                  disabled={!csvFile || importing}
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import {importPreview.length > 0 ? `${importPreview.length}` : ''} Items
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dispense Medicine Modal */}
+        <Dialog open={showDispenseModal} onOpenChange={setShowDispenseModal}>
+          <DialogContent className="sm:max-w-6xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pill className="w-5 h-5 text-primary" />
+                Dispense Medicine
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Side - Patient Selection & Items */}
+              <div className="space-y-6">
+                {/* Patient Selection */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-foreground">Patient Selection</h3>
+                  
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        checked={!isWalkInClient}
+                        onChange={() => setIsWalkInClient(false)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">Existing Patient</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        checked={isWalkInClient}
+                        onChange={() => setIsWalkInClient(true)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">Walk-in Client</span>
+                    </label>
+                  </div>
+
+                  {isWalkInClient ? (
+                    <div>
+                      <Label className="text-sm font-medium">Client Name</Label>
+                      <Input
+                        value={walkInClientName}
+                        onChange={(e) => setWalkInClientName(e.target.value)}
+                        placeholder="Enter client name"
+                        className="h-9"
+                      />
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Label className="text-sm font-medium">Select Patient</Label>
+                      <div className="relative">
+                        <Input
+                          value={patientSearchQuery}
+                          onChange={(e) => {
+                            setPatientSearchQuery(e.target.value);
+                            setShowPatientDropdown(true);
+                            if (!e.target.value) {
+                              setSelectedPatient(null);
+                            }
+                          }}
+                          onFocus={() => setShowPatientDropdown(true)}
+                          placeholder={patients.length === 0 ? 'No patients found...' : 'Search patients...'}
+                          className="h-9"
+                          disabled={patients.length === 0}
+                        />
+                        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        
+                        {showPatientDropdown && filteredPatients.length > 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filteredPatients.map(patient => (
+                              <div
+                                key={patient.id}
+                                onClick={() => handlePatientSelect(patient)}
+                                className="px-3 py-2 hover:bg-muted cursor-pointer border-b border-border last:border-b-0"
+                              >
+                                <div className="font-medium text-sm">
+                                  {patient.fullName || 'Unnamed Patient'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  ID: {patient.patientId || 'No ID'} • Phone: {patient.phoneNumber || 'No phone'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {showPatientDropdown && patientSearchQuery && filteredPatients.length === 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-lg shadow-lg p-3">
+                            <div className="text-sm text-muted-foreground text-center">
+                              No patients found matching "{patientSearchQuery}"
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {selectedPatient && (
+                        <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
+                          <div className="font-medium text-green-800">
+                            Selected: {selectedPatient.fullName}
+                          </div>
+                          <div className="text-green-600 text-xs">
+                            ID: {selectedPatient.patientId} • Phone: {selectedPatient.phoneNumber}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {patients.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          No patients found. Please register patients first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Available Inventory */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-foreground">Available Medicines</h3>
+                  <div className="border rounded-lg max-h-64 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 sticky top-0">
+                        <tr>
+                          <th className="text-left p-2 font-medium">Drug Name</th>
+                          <th className="text-left p-2 font-medium">Stock</th>
+                          <th className="text-left p-2 font-medium">Price</th>
+                          <th className="text-left p-2 font-medium">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredInventory.filter(item => item.current_stock > 0).map(item => (
+                          <tr key={item.id} className="hover:bg-muted/20">
+                            <td className="p-2 font-medium">{item.drug_name}</td>
+                            <td className="p-2">{item.current_stock}</td>
+                            <td className="p-2">{item.unit_of_measure || '-'}</td>
+                            <td className="p-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => addItemToDispensing(item)}
+                                disabled={dispensingItems.some(di => di.inventoryId === item.id)}
+                                className="h-7 px-2 text-xs"
+                              >
+                                {dispensingItems.some(di => di.inventoryId === item.id) ? 'Added' : 'Add'}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side - Dispensing List */}
+              <div className="space-y-6">
+                <h3 className="font-medium text-foreground">Items to Dispense</h3>
+                
+                {dispensingItems.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Pill className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No items selected for dispensing</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left p-2 font-medium">Drug</th>
+                            <th className="text-left p-2 font-medium">Qty</th>
+                            <th className="text-left p-2 font-medium">Price</th>
+                            <th className="text-left p-2 font-medium">Total</th>
+                            <th className="text-left p-2 font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {dispensingItems.map(item => (
+                            <tr key={item.inventoryId}>
+                              <td className="p-2 font-medium">{item.drugName}</td>
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max={item.availableStock}
+                                  value={item.quantity}
+                                  onChange={(e) => updateDispensingQuantity(item.inventoryId, parseInt(e.target.value) || 1)}
+                                  className="h-7 w-16 text-xs"
+                                />
+                              </td>
+                              <td className="p-2">SSP {item.unitPrice.toFixed(2)}</td>
+                              <td className="p-2 font-medium">SSP {item.totalPrice.toFixed(2)}</td>
+                              <td className="p-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removeDispensingItem(item.inventoryId)}
+                                  className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Total */}
+                    <div className="bg-muted/50 p-4 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total Amount:</span>
+                        <span className="text-lg font-bold">
+                          SSP {dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Step */}
+                {showPaymentStep && (
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-3">Payment Processing</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Payment Method</Label>
+                        <select
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value)}
+                          className="w-full h-9 px-3 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                          <option value="transfer">Bank Transfer</option>
+                          <option value="mobile">Mobile Money</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Amount Received ($)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          className="h-9"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                    {!paymentReceived && (
+                      <Button
+                        onClick={handlePaymentConfirmation}
+                        className="mt-3 w-full"
+                        disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                      >
+                        Confirm Payment Received
+                      </Button>
+                    )}
+                    {paymentReceived && (
+                      <div className="mt-3 p-2 bg-green-100 text-green-800 rounded text-sm text-center">
+                        ✓ Payment confirmed - Ready to dispense
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowDispenseModal(false);
+                      setSelectedPatient(null);
+                      setIsWalkInClient(false);
+                      setWalkInClientName('');
+                      setDispensingItems([]);
+                      setShowPaymentStep(false);
+                      setPaymentReceived(false);
+                      setPatientSearchQuery('');
+                      setShowPatientDropdown(false);
+                    }}
+                    className="flex-1"
+                    disabled={dispensing}
+                  >
+                    Cancel
+                  </Button>
+                  
+                  {!showPaymentStep ? (
+                    <Button
+                      onClick={handleProceedToPayment}
+                      className="flex-1"
+                      disabled={dispensingItems.length === 0}
+                    >
+                      <Pill className="w-4 h-4 mr-2" />
+                      Proceed to Payment
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleDispenseSubmit}
+                      className="flex-1"
+                      disabled={dispensing || !paymentReceived}
+                    >
+                      {dispensing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Dispensing...
+                        </>
+                      ) : (
+                        <>
+                          <Pill className="w-4 h-4 mr-2" />
+                          Dispense Medicine
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Receipt Modal */}
+        <Dialog open={showReceipt} onOpenChange={(open) => {
+          console.log('Receipt modal open state changed:', open);
+          setShowReceipt(open);
+        }}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
+              <DialogTitle>Pharmacy Receipt</DialogTitle>
+              <DialogDescription>
+                Payment processed successfully
+              </DialogDescription>
+            </DialogHeader>
+            
+            {lastReceipt && (
+              <div className="flex flex-col space-y-4 flex-1 min-h-0">
+                {/* Receipt Preview */}
+                <div className="flex-1 overflow-y-auto border rounded-lg p-4 bg-muted/20">
+                  <div className="space-y-3 text-sm">
+                    <div className="text-center border-b pb-3">
+                      <h3 className="font-bold text-lg">UNIVERSAL HOSPITAL</h3>
+                      <p className="text-xs text-muted-foreground">Pharmacy Department</p>
+                      <p className="text-xs text-muted-foreground">Receipt #{lastReceipt.receipt_number}</p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Patient:</span>
+                        <span className="font-medium">{lastReceipt.patient_name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Patient ID:</span>
+                        <span>{lastReceipt.patient_id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Bill Number:</span>
+                        <span>{lastReceipt.bill_number}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Date:</span>
+                        <span>{new Date(lastReceipt.payment_date).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3">
+                      <h4 className="font-medium mb-2">Medications Dispensed:</h4>
+                      <div className="space-y-2">
+                        {lastReceipt.dispensingItems?.map((item: any, index: number) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <div className="flex-1">
+                              <div className="font-medium">{item.drugName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {item.quantity} × SSP {item.unitPrice.toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="font-medium">SSP {item.totalPrice.toFixed(2)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Payment Method:</span>
+                        <span className="capitalize">{lastReceipt.payment_method}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg">
+                        <span>Total Amount:</span>
+                        <span>SSP {lastReceipt.payment_amount.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3 text-center text-xs text-muted-foreground">
+                      <p>Dispensed by: {lastReceipt.cashier_name}</p>
+                      <p>Thank you for your payment!</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-between gap-3 flex-shrink-0">
+                  <Button variant="outline" onClick={handleCloseReceipt} className="flex-1">
+                    Close
+                  </Button>
+                  <Button onClick={handlePrintReceipt} className="flex-1 gap-2">
+                    <Printer className="w-4 h-4" />
+                    Print Receipt
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AppLayout>
+  );
+};
+
+export default Pharmacy;
