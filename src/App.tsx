@@ -19,6 +19,12 @@ import LabTests from "./pages/setup/LabTests";
 import MindrayIntegration from "./pages/MindrayIntegration";
 import Clinics from '@/pages/setup/Clinics';
 import Security from "./pages/setup/Security";
+import SecurityClean from "./pages/setup/SecurityClean";
+import SecurityFixed from "./pages/setup/SecurityFixed";
+import SecurityMinimal from "./pages/setup/SecurityMinimal";
+import SecurityWorking from "./pages/setup/SecurityWorking";
+import SecuritySimple from "./pages/setup/SecuritySimple";
+import SecurityTest from "./pages/setup/SecurityTest";
 import LedgerAccounts from "./pages/accounts/LedgerAccounts";
 import Profile from "./pages/Profile";
 import SetupPassword from "./pages/SetupPassword";
@@ -169,7 +175,12 @@ const AppRoutes = () => {
       } />
       <Route path="/setup/security" element={
         <ProtectedRoute allowedRoles={['admin']}>
-          <Security />
+          <SecurityFixed />
+        </ProtectedRoute>
+      } />
+      <Route path="/setup/security-test" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <SecurityTest />
         </ProtectedRoute>
       } />
       <Route path="/profile" element={

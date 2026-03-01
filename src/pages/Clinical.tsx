@@ -665,11 +665,18 @@ const Clinical: React.FC = () => {
   };
 
   const fetchData = async () => {
-    if (!user?.clinic) return;
+    console.log('Clinical fetchData called, user:', user);
     
     try {
+      setLoading(true);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching clinical data for clinic:', clinicId);
       // Fetch patients from MySQL
-      const patientsData = await clinicalApi.getPatients(user.clinic);
+      const patientsData = await clinicalApi.getPatients(clinicId);
+      console.log('Patients data received:', patientsData);
+      
       // Transform MySQL data to match frontend Patient interface
       const transformedPatients = patientsData.map(patient => ({
         id: patient.id,
@@ -687,10 +694,12 @@ const Clinical: React.FC = () => {
         registeredAt: patient.createdAt,
         registeredBy: patient.registered_by
       })) as Patient[];
-      setPatients(transformedPatients);
+      setPatients(transformedPatients || []);
 
       // Fetch patient queue from MySQL
-      const queueData = await clinicalApi.getQueue(user.clinic);
+      const queueData = await clinicalApi.getQueue(clinicId);
+      console.log('Queue data received:', queueData);
+      
       // Transform MySQL data to match frontend PatientQueue interface
       const transformedQueue = queueData.map(queue => ({
         id: queue.id,
@@ -698,7 +707,7 @@ const Clinical: React.FC = () => {
         patientDocId: queue.patient_id, // Use patient_id as doc id
         patientName: queue.patient_name || 'Unknown',
         age: queue.age || 0,
-        clinic: queue.clinic_id?.toString() || user?.clinic || '1',
+        clinic: queue.clinic_id?.toString() || clinicId,
         doctor: queue.doctor || '',
         priority: queue.priority || 'normal',
         notes: queue.notes || '',
@@ -706,10 +715,10 @@ const Clinical: React.FC = () => {
         queuedAt: queue.created_at || queue.queued_at,
         queuedBy: queue.queued_by || 'System'
       })) as PatientQueue[];
-      setPatientQueue(transformedQueue);
+      setPatientQueue(transformedQueue || []);
 
       // Fetch visits from MySQL
-      const visitsData = await clinicalApi.getVisits(user.clinic, user.uid);
+      const visitsData = await clinicalApi.getVisits(clinicId, user?.uid || 'default');
       // Transform MySQL data to match frontend Visit interface
       const transformedVisits = visitsData.map(visit => ({
         id: visit.id,
@@ -736,7 +745,11 @@ const Clinical: React.FC = () => {
       }));
       setVisits(transformedVisits);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching clinical data:', error);
+      // Set empty arrays on error
+      setPatients([]);
+      setPatientQueue([]);
+      setVisits([]);
     } finally {
       setLoading(false);
     }

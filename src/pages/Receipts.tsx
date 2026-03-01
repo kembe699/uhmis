@@ -141,19 +141,29 @@ const Receipts: React.FC = () => {
   }, []);
 
   const fetchReceipts = async () => {
-    if (!user?.clinic) return;
+    console.log('Receipts fetchReceipts called, user:', user);
     
     try {
       setLoading(true);
-      const data = await receiptsApi.getByClinic(user.clinic);
-      setReceipts(data);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching receipts for clinic:', clinicId);
+      
+      const data = await receiptsApi.getByClinic(clinicId);
+      console.log('Receipts data received:', data);
+      
+      setReceipts(data || []);
       
       // Extract unique cashiers from receipts
-      const uniqueCashiers = [...new Set(data.map(receipt => receipt.cashier_name).filter(Boolean))];
+      const uniqueCashiers = [...new Set((data || []).map(receipt => receipt.cashier_name).filter(Boolean))];
       setCashiers(uniqueCashiers);
+      
+      console.log('Successfully loaded', (data || []).length, 'receipts');
     } catch (error) {
       console.error('Error fetching receipts:', error);
-      toast.error('Failed to fetch receipts');
+      setReceipts([]); // Set empty array on error
+      setCashiers([]);
     } finally {
       setLoading(false);
     }

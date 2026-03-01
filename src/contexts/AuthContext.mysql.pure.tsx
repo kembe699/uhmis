@@ -95,12 +95,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (savedToken) {
           const { user: userData } = await authApi.verifyToken(savedToken);
           setToken(savedToken);
+          console.log('Setting user from token verification, userData:', userData);
           setUser({
             uid: userData.id,
             email: userData.email,
             displayName: userData.displayName,
             role: userData.role,
-            clinic: userData.clinicId?.toString() || '',
+            clinic: userData.clinicId?.toString() || '1', // Default to clinic '1' if not set
           });
         }
       } catch (error) {
@@ -124,12 +125,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(authToken);
       
       // Set user data
+      console.log('Setting user from login, userData:', userData);
       setUser({
         uid: userData.id,
         email: userData.email,
         displayName: userData.displayName,
         role: userData.role,
-        clinic: userData.clinicId?.toString() || '',
+        clinic: userData.clinicId?.toString() || '1', // Default to clinic '1' if not set
       });
 
       // Don't call toast here to avoid render warnings

@@ -25,11 +25,47 @@ module.exports = (sequelize) => {
       allowNull: false
     },
     status: {
-      type: DataTypes.ENUM('pending', 'approved', 'received', 'cancelled'),
-      defaultValue: 'pending'
+      type: DataTypes.ENUM('draft', 'check', 'approved', 'authorized', 'received', 'cancelled'),
+      defaultValue: 'draft'
     },
     notes: {
       type: DataTypes.TEXT,
+      allowNull: true
+    },
+    check_signature: {
+      type: DataTypes.TEXT('long'),
+      allowNull: true
+    },
+    check_signed_by: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    check_signed_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    approved_signature: {
+      type: DataTypes.TEXT('long'),
+      allowNull: true
+    },
+    approved_signed_by: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    approved_signed_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    authorized_signature: {
+      type: DataTypes.TEXT('long'),
+      allowNull: true
+    },
+    authorized_signed_by: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    authorized_signed_at: {
+      type: DataTypes.DATE,
       allowNull: true
     }
   }, {

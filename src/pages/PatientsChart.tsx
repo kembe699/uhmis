@@ -53,10 +53,16 @@ const PatientsChart: React.FC = () => {
 
   // Fetch all patients
   const fetchPatients = async () => {
-    if (!user?.clinic) return;
+    console.log('PatientsChart fetchPatients called, user:', user);
     
     try {
-      const response = await fetch(`/api/patients?clinic=${encodeURIComponent(user.clinic)}`, {
+      setLoading(true);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching patients for clinic:', clinicId);
+      
+      const response = await fetch(`/api/patients?clinic=${encodeURIComponent(clinicId)}`, {
         credentials: 'include'
       });
       
@@ -65,9 +71,13 @@ const PatientsChart: React.FC = () => {
       }
       
       const patientsData = await response.json() as Patient[];
-      setPatients(patientsData);
+      console.log('Patients data received:', patientsData);
+      
+      setPatients(patientsData || []);
+      console.log('Successfully loaded', (patientsData || []).length, 'patients');
     } catch (error) {
       console.error('Error fetching patients:', error);
+      setPatients([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { 
   UserPlus, 
@@ -8,16 +8,13 @@ import {
   Settings,
   Edit,
   Trash2,
-  Eye,
-  Loader2
+  Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-const Security: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading] = useState(false);
-
+const SecuritySimple: React.FC = () => {
+  // Hardcoded users - no useState, no useEffect, no async
   const users = [
     {
       id: '1',
@@ -77,12 +74,6 @@ const Security: React.FC = () => {
 
   const activeUsers = users.filter(u => u.isActive);
   const disabledUsers = users.filter(u => !u.isActive);
-  
-  const filteredUsers = users.filter(user =>
-    user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -108,7 +99,7 @@ const Security: React.FC = () => {
     }
   };
 
-  console.log('Security component rendering with', users.length, 'users');
+  console.log('SecuritySimple rendering with', users.length, 'users');
 
   return (
     <AppLayout>
@@ -238,4 +229,4 @@ const Security: React.FC = () => {
   );
 };
 
-export default Security;
+export default SecuritySimple;

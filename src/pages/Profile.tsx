@@ -14,7 +14,10 @@ import {
   Calendar,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  PenTool,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +39,10 @@ const Profile: React.FC = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
+  const [signature, setSignature] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // Edit profile form state
   const [editFormData, setEditFormData] = useState({
@@ -132,6 +139,76 @@ const Profile: React.FC = () => {
       setSaving(false);
     }
   };
+
+  // Signature functions
+  const handleSignatureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setSignature(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        toast.error('Please upload an image file');
+      }
+    }
+  };
+
+  const clearSignature = () => {
+    setSignature(null);
+  };
+
+  const saveSignature = async () => {
+    if (!signature || !user) return;
+    
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/users/${user.uid}/signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ signature }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save signature');
+      }
+
+      toast.success('Signature saved successfully');
+      setShowSignatureModal(false);
+    } catch (error) {
+      console.error('Error saving signature:', error);
+      toast.error('Failed to save signature');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Load existing signature
+  useEffect(() => {
+    const loadSignature = async () => {
+      if (!user) return;
+      
+      try {
+        const response = await fetch(`/api/users/${user.uid}/signature`, {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setSignature(data.signature);
+        }
+      } catch (error) {
+        console.error('Error loading signature:', error);
+      }
+    };
+
+    loadSignature();
+  }, [user]);
 
   const getRoleBadgeColor = (role: UserRole) => {
     const colors = {
@@ -263,6 +340,63 @@ const Profile: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Electronic Signature Card */}
+          <div className="bg-card rounded-xl border border-border p-6 lg:col-span-2">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <PenTool className="w-5 h-5" />
+              Electronic Signature
+            </h2>
+            
+            <div className="space-y-4">
+              {signature ? (
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-medium">Current Signature</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowSignatureModal(true)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearSignature}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="bg-white border rounded-lg p-4 max-w-md">
+                    <img 
+                      src={signature} 
+                      alt="Electronic Signature" 
+                      className="max-w-full h-auto max-h-24"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="text-center">
+                    <PenTool className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                    <p className="font-medium mb-2">No signature added</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Add your electronic signature to use in documents and approvals
+                    </p>
+                    <Button onClick={() => setShowSignatureModal(true)}>
+                      <PenTool className="w-4 h-4 mr-2" />
+                      Add Signature
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Edit Profile Modal */}
@@ -322,6 +456,170 @@ const Profile: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Electronic Signature Modal */}
+        <Dialog open={showSignatureModal} onOpenChange={setShowSignatureModal}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <PenTool className="w-5 h-5" />
+                Electronic Signature
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4 mt-4">
+              {/* Mode Selection */}
+              <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                <Button
+                  type="button"
+                  variant={signatureMode === 'draw' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setSignatureMode('draw')}
+                  className="flex-1"
+                >
+                  <PenTool className="w-4 h-4 mr-2" />
+                  Draw
+                </Button>
+                <Button
+                  type="button"
+                  variant={signatureMode === 'upload' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setSignatureMode('upload')}
+                  className="flex-1"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </Button>
+              </div>
+
+              {/* Drawing Mode */}
+              {signatureMode === 'draw' && (
+                <div className="space-y-4">
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Draw your signature in the area below:
+                    </p>
+                    <canvas
+                      id="signatureCanvas"
+                      width="600"
+                      height="200"
+                      className="border border-border rounded-lg bg-white cursor-crosshair w-full"
+                      style={{ maxWidth: '100%', height: 'auto' }}
+                      onMouseDown={(e) => {
+                        setIsDrawing(true);
+                        const canvas = e.currentTarget;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                          const rect = canvas.getBoundingClientRect();
+                          ctx.beginPath();
+                          ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                        }
+                      }}
+                      onMouseMove={(e) => {
+                        if (!isDrawing) return;
+                        const canvas = e.currentTarget;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                          const rect = canvas.getBoundingClientRect();
+                          ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                          ctx.stroke();
+                        }
+                      }}
+                      onMouseUp={() => {
+                        setIsDrawing(false);
+                        const canvas = document.getElementById('signatureCanvas') as HTMLCanvasElement;
+                        if (canvas) {
+                          setSignature(canvas.toDataURL());
+                        }
+                      }}
+                      onMouseLeave={() => setIsDrawing(false)}
+                    />
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const canvas = document.getElementById('signatureCanvas') as HTMLCanvasElement;
+                          if (canvas) {
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) {
+                              ctx.clearRect(0, 0, canvas.width, canvas.height);
+                              setSignature(null);
+                            }
+                          }
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Mode */}
+              {signatureMode === 'upload' && (
+                <div className="space-y-4">
+                  <div className="bg-muted/50 p-4 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Upload an image of your signature (PNG, JPG, or GIF):
+                    </p>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSignatureUpload}
+                      className="h-12"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Preview */}
+              {signature && (
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <p className="text-sm font-medium mb-3">Preview:</p>
+                  <div className="bg-white border rounded-lg p-4 max-w-md">
+                    <img 
+                      src={signature} 
+                      alt="Signature Preview" 
+                      className="max-w-full h-auto max-h-24"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowSignatureModal(false);
+                    setSignature(null);
+                  }}
+                  className="flex-1"
+                  disabled={saving}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={saveSignature}
+                  className="flex-1"
+                  disabled={saving || !signature}
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Save Signature
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

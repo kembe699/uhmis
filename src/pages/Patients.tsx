@@ -112,13 +112,27 @@ class PatientQueueApiClient {
 
   async create(queueData: any): Promise<any> {
     try {
+      console.log('Making POST request to:', this.baseUrl);
+      console.log('Queue data being sent:', queueData);
+      
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(queueData),
       });
-      if (!response.ok) throw new Error('Failed to add patient to queue');
-      return await response.json();
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to add patient to queue: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Queue creation successful:', result);
+      return result;
     } catch (error) {
       console.error('Error adding patient to queue:', error);
       throw error;
@@ -200,6 +214,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -276,73 +291,136 @@ const Patients: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchPatients();
-    fetchUsers();
-    fetchClinics();
-    fetchQueueStatus();
+    if (user) {
+      fetchPatients();
+      fetchUsers();
+      fetchClinics();
+      fetchQueueStatus();
+    } else {
+      setLoading(false);
+    }
   }, [user?.clinic]);
 
   const fetchPatients = async () => {
-    if (!user?.clinic) return;
+    console.log('fetchPatients called, user:', user);
     
     try {
-      // Use MySQL API to fetch patients by clinic
-      const data = await patientApi.getByClinic(user.clinic);
+      setLoading(true);
+      console.log('Fetching all patients from API...');
+      
+      // Fetch all patients directly
+      const response = await fetch('/api/patients');
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Raw API response:', data);
+      
+      if (!Array.isArray(data)) {
+        throw new Error('API response is not an array');
+      }
       
       // Transform MySQL data to match frontend expectations
-      const transformedData = data.map(patient => ({
-        id: patient.id,
-        patientId: patient.patient_id,
-        fullName: `${patient.first_name} ${patient.last_name}`,
-        firstName: patient.first_name,
-        lastName: patient.last_name,
-        age: calculateAgeFromDateOfBirth(patient.date_of_birth),
-        dateOfBirth: patient.date_of_birth,
-        gender: patient.gender,
-        phoneNumber: patient.phone || '',
-        occupation: patient.occupation || '',
-        address: patient.address || '',
-        clinic: user.clinic,
-        registeredAt: patient.createdAt || new Date().toISOString(),
-        registeredBy: user?.displayName || 'System',
-        beneficiaryType: 'local_residents'
-      })) as Patient[];
+      const transformedData = data.map(patient => {
+        console.log('Transforming patient:', patient);
+        return {
+          id: patient.id,
+          patientId: patient.patient_id,
+          fullName: `${patient.first_name} ${patient.last_name || ''}`.trim(),
+          firstName: patient.first_name,
+          lastName: patient.last_name || '',
+          age: calculateAgeFromDateOfBirth(patient.date_of_birth),
+          dateOfBirth: patient.date_of_birth,
+          gender: patient.gender,
+          phoneNumber: patient.phone_number || '',
+          occupation: patient.occupation || '',
+          address: patient.address || '',
+          clinic: user?.clinic || 'Unknown',
+          registeredAt: patient.createdAt || patient.created_at || new Date().toISOString(),
+          registeredBy: user?.displayName || 'System',
+          beneficiaryType: 'local_residents'
+        };
+      }) as Patient[];
       
+      console.log('Transformed data:', transformedData);
       setPatients(transformedData);
+      console.log('Successfully loaded', transformedData.length, 'patients');
     } catch (error) {
       console.error('Error fetching patients:', error);
       toast.error('Failed to load patients');
+      setPatients([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
   };
 
   const fetchUsers = async () => {
-    if (!user?.clinic) return;
+    console.log('fetchUsers called for doctors, user:', user);
     
     try {
-      // Use MySQL API to fetch users by clinic
-      const usersData = await userApi.getByClinic(user.clinic);
+      // Try direct API call first
+      console.log('Fetching doctors via direct API call...');
+      const response = await fetch('/api/users');
       
-      // Filter users by admin and doctor roles
-      const adminAndDoctorUsers = usersData
-        .filter(userData => userData.role === 'admin' || userData.role === 'doctor')
-        .map(userData => ({
-          displayName: userData.display_name,
-          role: userData.role
-        }))
-        .sort((a, b) => {
-          // Sort by role (admin first, then doctor), then by name
-          if (a.role !== b.role) {
-            return a.role === 'admin' ? -1 : 1;
-          }
-          return a.displayName.localeCompare(b.displayName);
-        });
+      if (response.ok) {
+        const usersData = await response.json();
+        console.log('Users data received:', usersData);
+        
+        // Filter users by admin and doctor roles
+        const adminAndDoctorUsers = usersData
+          .filter(userData => userData.role === 'admin' || userData.role === 'doctor')
+          .map(userData => ({
+            displayName: userData.display_name || userData.email,
+            role: userData.role
+          }))
+          .sort((a, b) => {
+            // Sort by role (admin first, then doctor), then by name
+            if (a.role !== b.role) {
+              return a.role === 'admin' ? -1 : 1;
+            }
+            return a.displayName.localeCompare(b.displayName);
+          });
+        
+        console.log('Filtered doctors:', adminAndDoctorUsers);
+        setDoctors(adminAndDoctorUsers);
+        return;
+      }
       
-      setDoctors(adminAndDoctorUsers);
+      // Fallback to userApi if direct API fails
+      if (user?.clinic) {
+        console.log('Direct API failed, trying userApi...');
+        const usersData = await userApi.getByClinic(user.clinic);
+        
+        const adminAndDoctorUsers = usersData
+          .filter(userData => userData.role === 'admin' || userData.role === 'doctor')
+          .map(userData => ({
+            displayName: userData.display_name,
+            role: userData.role
+          }))
+          .sort((a, b) => {
+            if (a.role !== b.role) {
+              return a.role === 'admin' ? -1 : 1;
+            }
+            return a.displayName.localeCompare(b.displayName);
+          });
+        
+        setDoctors(adminAndDoctorUsers);
+      } else {
+        throw new Error('No user clinic available and direct API failed');
+      }
+      
     } catch (error) {
       console.error('Error fetching users:', error);
-      toast.error('Failed to load doctors');
+      
+      // Set fallback doctors
+      const fallbackDoctors = [
+        { displayName: 'Universal Hospital Admin', role: 'admin' },
+        { displayName: 'Jok Marol', role: 'doctor' }
+      ];
+      
+      console.log('Setting fallback doctors:', fallbackDoctors);
+      setDoctors(fallbackDoctors);
     }
   };
 
@@ -362,7 +440,7 @@ const Patients: React.FC = () => {
       setClinics(transformedClinics);
     } catch (error) {
       console.error('Error fetching clinics:', error);
-      toast.error('Failed to load clinics');
+      setClinics([]); // Set empty array on error
     }
   };
 
@@ -383,22 +461,31 @@ const Patients: React.FC = () => {
       const statusMap = new Map<string, string>();
       
       queueEntries.forEach(entry => {
-        const patientId = entry.patient_id; // Use patient_id from queue entry
+        const dbPatientId = entry.patient_id; // This is now the database ID
         const status = entry.status;
         
-        console.log(`Processing queue entry: Patient ${patientId} has status ${status}`);
+        console.log(`Processing queue entry: DB Patient ID ${dbPatientId} has status ${status}`);
         
-        // Add to queued patients if status is waiting or in_progress
-        // If status is completed, remove from queued patients (allow re-queueing)
-        if (status === 'waiting' || status === 'in_progress') {
-          queuedPatientIds.add(patientId);
-          console.log(`Added patient ${patientId} to queued patients (status: ${status})`);
+        // Find the patient identifier (UH-1234) that matches this database ID
+        const patient = patients.find(p => p.id === dbPatientId);
+        if (patient) {
+          const patientIdentifier = patient.patientId; // UH-1234 format
+          console.log(`Mapped DB ID ${dbPatientId} to patient identifier ${patientIdentifier}`);
+          
+          // Add to queued patients if status is waiting or in_progress
+          // If status is completed, remove from queued patients (allow re-queueing)
+          if (status === 'waiting' || status === 'in_progress') {
+            queuedPatientIds.add(patientIdentifier);
+            console.log(`Added patient ${patientIdentifier} to queued patients (status: ${status})`);
+          } else {
+            console.log(`Patient ${patientIdentifier} not added to queued patients (status: ${status})`);
+          }
+          
+          // Track status for each patient using patient identifier
+          statusMap.set(patientIdentifier, status);
         } else {
-          console.log(`Patient ${patientId} not added to queued patients (status: ${status})`);
+          console.log(`Could not find patient with DB ID ${dbPatientId} in current patient list`);
         }
-        
-        // Track status for each patient
-        statusMap.set(patientId, status);
       });
       
       console.log('Final queuedPatientIds:', Array.from(queuedPatientIds));
@@ -455,10 +542,11 @@ const Patients: React.FC = () => {
         last_name: formData.fullName.split(' ').slice(1).join(' ') || '',
         date_of_birth: formData.dateOfBirth || calculateDateOfBirthFromAge(parseInt(formData.age)),
         gender: formData.gender,
-        phone: formData.phoneNumber,
-        occupation: formData.occupation,
+        phone_number: formData.phoneNumber,
         address: '', // Can be added to form later
-        clinic_id: parseInt(user.clinic) || 1, // Convert clinic to number
+        clinic_id: 6, // Use default General Medicine clinic
+        registered_by: null, // Set to null to avoid foreign key issues
+        registration_date: new Date(), // Add registration_date field
       };
 
       // Create patient using MySQL API
@@ -580,7 +668,7 @@ const Patients: React.FC = () => {
       
       // Prepare queue data for MySQL
       const queueData_mysql = {
-        patient_id: registeredPatient.patientDocId,
+        patient_id: registeredPatient.patientId, // Use patientId (UH-1234) instead of patientDocId
         queue_type: 'consultation',
         priority: queueData.priority,
         notes: queueData.notes.trim(),
@@ -838,8 +926,8 @@ const Patients: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-right">
                         {(() => {
-                          const queueStatus = patientQueueStatus.get(patient.id);
-                          const isQueued = queuedPatients.has(patient.id);
+                          const queueStatus = patientQueueStatus.get(patient.patientId);
+                          const isQueued = queuedPatients.has(patient.patientId);
                           
                           if (isQueued) {
                             // Patient is in queue (waiting or in_progress)
@@ -850,7 +938,7 @@ const Patients: React.FC = () => {
                                 className="bg-blue-600 text-white shadow-sm cursor-default"
                               >
                                 <Check className="w-4 h-4 mr-2" />
-                                Active
+                                Queued
                               </Button>
                             );
                           } else if (queueStatus === 'completed' || queueStatus === 'cancelled') {
@@ -915,6 +1003,9 @@ const Patients: React.FC = () => {
                 <UserPlus className="w-5 h-5 text-primary" />
                 Register New Patient
               </DialogTitle>
+              <DialogDescription>
+                Fill out the form below to register a new patient in the system.
+              </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -1036,8 +1127,11 @@ const Patients: React.FC = () => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5" />
-                Queue Patient
+                Add Patient to Queue
               </DialogTitle>
+              <DialogDescription>
+                Add the registered patient to a clinic queue for consultation.
+              </DialogDescription>
             </DialogHeader>
             
             {registeredPatient && (

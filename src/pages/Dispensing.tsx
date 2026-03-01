@@ -53,33 +53,37 @@ const Dispensing: React.FC = () => {
   }, [user?.clinic]);
 
   const fetchData = async () => {
-    if (!user?.clinic) return;
+    console.log('Dispensing fetchData called, user:', user);
     
     try {
-      // Fetch active prescriptions grouped by patient
-      const prescriptionsRef = collection(db, 'prescriptions');
-      const prescriptionsQuery = query(
-        prescriptionsRef, 
-        where('clinic', '==', user.clinic),
-        where('status', '==', 'active'),
-        orderBy('prescribedAt', 'desc')
-      );
-      const prescriptionsSnapshot = await getDocs(prescriptionsQuery);
-      const prescriptionsData = prescriptionsSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
+      setLoading(true);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching dispensing data for clinic:', clinicId);
+      
+      // Fetch active prescriptions from MySQL API
+      const response = await fetch(`/api/prescriptions?clinic=${encodeURIComponent(clinicId)}&status=active`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch prescriptions');
+      }
+      
+      const prescriptionsData = await response.json();
+      console.log('Prescriptions data received:', prescriptionsData);
       
       // Group prescriptions by patient for queue
       const groupedPrescriptions = prescriptionsData.reduce((groups: any, prescription: any) => {
-        const key = prescription.visitId || `${prescription.patientName}-${prescription.prescribedAt.split('T')[0]}`;
+        const key = prescription.visit_id || `${prescription.patient_name}-${prescription.prescribed_at?.split('T')[0]}`;
         if (!groups[key]) {
           groups[key] = {
             id: key,
-            patientName: prescription.patientName,
-            patientId: prescription.patientId,
-            prescribedBy: prescription.prescribedBy,
-            prescribedAt: prescription.prescribedAt,
+            patientName: prescription.patient_name,
+            patientId: prescription.patient_id,
+            prescribedBy: prescription.prescribed_by,
+            prescribedAt: prescription.prescribed_at,
             medications: []
           };
         }
@@ -87,22 +91,29 @@ const Dispensing: React.FC = () => {
         return groups;
       }, {});
 
-      setPrescriptionQueue(Object.values(groupedPrescriptions));
+      setPrescriptionQueue(Object.values(groupedPrescriptions) || []);
       setQueueLength(Object.keys(groupedPrescriptions).length);
 
-      // Get today's dispensed count
+      // Get today's dispensed count from MySQL API
       const today = new Date().toISOString().split('T')[0];
-      const dispensingRef = collection(db, 'pharmacy_dispensing');
-      const todayQuery = query(
-        dispensingRef,
-        where('clinic', '==', user.clinic),
-        where('date', '>=', today),
-        where('date', '<', today + 'T23:59:59')
-      );
-      const todaySnapshot = await getDocs(todayQuery);
-      setTodayDispensed(todaySnapshot.size);
+      const dispensingResponse = await fetch(`/api/pharmacy/dispensing?clinic=${encodeURIComponent(clinicId)}&date=${today}`, {
+        credentials: 'include'
+      });
+      
+      if (dispensingResponse.ok) {
+        const dispensingData = await dispensingResponse.json();
+        setTodayDispensed(dispensingData.length || 0);
+      } else {
+        setTodayDispensed(0);
+      }
+      
+      console.log('Successfully loaded dispensing data');
     } catch (error) {
       console.error('Error fetching dispensing data:', error);
+      // Set empty arrays on error
+      setPrescriptionQueue([]);
+      setQueueLength(0);
+      setTodayDispensed(0);
     } finally {
       setLoading(false);
     }

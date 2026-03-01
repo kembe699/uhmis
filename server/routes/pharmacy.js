@@ -5,33 +5,36 @@ const { Patient, DrugInventory, Prescription, PharmacyDispensing, Receipt, seque
 // Get pharmacy inventory for a clinic
 router.get('/inventory/:clinicId', async (req, res) => {
   try {
+    console.log('=== PHARMACY INVENTORY REQUEST ===');
     const { clinicId } = req.params;
+    console.log('Clinic ID:', clinicId);
     
-    // Optimize: Select only necessary fields for better performance
+    console.log('Fetching drug inventory from database...');
     const inventory = await DrugInventory.findAll({
-      where: { clinic_id: parseInt(clinicId) },
-      attributes: [
-        'id', 'drug_name', 'generic_name', 'current_stock', 
-        'reorder_level', 'unit_of_measure', 'selling_price', 
-        'unit_cost', 'expiry_date', 'batch_number',
-        'date_received', 'received_by', 'clinic_id', 'quantity_received'
-      ],
-      order: [['drug_name', 'ASC']], // Order by name for faster lookup
-      limit: 1000 // Limit to prevent excessive data transfer
+      where: { clinic_id: clinicId },
+      order: [['drug_name', 'ASC']]
     });
+
+    console.log('Inventory found:', inventory ? inventory.length + ' items' : 'none');
+    console.log('Sample inventory items:', inventory.slice(0, 3).map(item => ({ id: item.id, drug_name: item.drug_name, current_stock: item.current_stock })));
 
     res.json(inventory);
   } catch (error) {
-    console.error('Error fetching pharmacy inventory:', error);
-    res.status(500).json({ error: 'Failed to fetch pharmacy inventory' });
+    console.error('=== PHARMACY INVENTORY ERROR ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch pharmacy inventory', details: error.message });
   }
 });
 
 // Add inventory item
 router.post('/inventory', async (req, res) => {
   try {
+    console.log('=== ADD INVENTORY ITEM REQUEST ===');
     const inventoryData = req.body;
-    console.log('Adding inventory item:', JSON.stringify(inventoryData, null, 2));
+    console.log('Request body received:', JSON.stringify(inventoryData, null, 2));
+    console.log('Request headers:', req.headers);
     
     // Validate required fields
     const requiredFields = ['drug_name', 'current_stock', 'expiry_date', 'reorder_level', 'clinic_id', 'date_received', 'received_by', 'unit_of_measure'];
@@ -63,16 +66,27 @@ router.post('/inventory', async (req, res) => {
       inventoryData.selling_price = parseFloat(inventoryData.selling_price);
     }
     
-    console.log('Processed inventory data:', JSON.stringify(inventoryData, null, 2));
+    console.log('Processed inventory data before DB insert:', JSON.stringify(inventoryData, null, 2));
     
+    console.log('Attempting to create inventory item in database...');
     const inventoryItem = await DrugInventory.create(inventoryData);
-    console.log('Inventory item created successfully:', inventoryItem.id);
+    console.log('Inventory item created successfully with ID:', inventoryItem.id);
     
     res.json(inventoryItem);
   } catch (error) {
-    console.error('Error adding inventory item:', error);
-    console.error('Error details:', error.message);
+    console.error('=== ERROR ADDING INVENTORY ITEM ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error details:', error);
     console.error('Error stack:', error.stack);
+    
+    if (error.errors && error.errors.length > 0) {
+      console.error('Validation errors:', error.errors.map(e => ({
+        field: e.path,
+        message: e.message,
+        value: e.value
+      })));
+    }
     
     // Provide more specific error messages
     let errorMessage = 'Failed to add inventory item';
@@ -271,18 +285,32 @@ router.post('/receipts', async (req, res) => {
     const receiptData = req.body;
     console.log('Creating pharmacy receipt:', receiptData);
     
-    // Check for active cashier shift
+    // Check for active cashier shift for the current user
     const { CashierShift } = require('../models');
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      console.log('Validation failed: No authenticated user');
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        requiresAuth: true
+      });
+    }
+    
     const activeShift = await CashierShift.findOne({
-      where: { status: 'open' },
+      where: { 
+        cashier_id: userId,
+        status: 'open' 
+      },
       order: [['start_time', 'DESC']]
     });
     
     if (!activeShift) {
-      console.log('Validation failed: No active cashier shift');
+      console.log('Validation failed: No active cashier shift for user:', userId);
       return res.status(403).json({ 
         error: 'No active cashier shift found. Please start a cashier shift before making payments.',
-        requiresShift: true
+        requiresShift: true,
+        userId: userId
       });
     }
     

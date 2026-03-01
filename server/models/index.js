@@ -52,6 +52,10 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+  signature: {
+    type: DataTypes.TEXT('long'),
+    allowNull: true,
+  },
 }, {
   tableName: 'users',
   timestamps: true,
@@ -114,6 +118,7 @@ const Patient = sequelize.define('Patient', {
   },
   registered_by: {
     type: DataTypes.UUID,
+    allowNull: true,
   },
 }, {
   tableName: 'patients',
@@ -257,6 +262,7 @@ const CashierShiftModel = require('./CashierShift');
 const CashTransferModel = require('./CashTransfer');
 const SupplierModel = require('./Supplier');
 const PurchaseOrderModel = require('./PurchaseOrder');
+const PurchaseOrderItemModel = require('./PurchaseOrderItem');
 const DailyExpenseModel = require('./DailyExpense');
 
 // Initialize DrClinic model
@@ -278,6 +284,7 @@ const CashTransfer = CashTransferModel(sequelize);
 // Initialize Procurement models
 const Supplier = SupplierModel(sequelize);
 const PurchaseOrder = PurchaseOrderModel(sequelize);
+const PurchaseOrderItem = PurchaseOrderItemModel(sequelize);
 const DailyExpense = DailyExpenseModel(sequelize);
 
 // Define associations
@@ -286,6 +293,10 @@ LabTestComponent.belongsTo(LabTest, { foreignKey: 'lab_test_id', as: 'labTest' }
 
 // Patient Queue associations
 PatientQueue.belongsTo(Patient, { foreignKey: 'patient_id', as: 'patient' });
+
+// Purchase Order associations
+PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'purchase_order_id', as: 'items' });
+PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'purchase_order_id', as: 'purchaseOrder' });
 
 // Initialize database
 const initializeDatabase = async () => {
@@ -308,6 +319,21 @@ const initializeDatabase = async () => {
         console.log('password_hash column already exists');
       } else {
         console.log('Note: Could not add password_hash column (may already exist)');
+      }
+    }
+
+    // Manually add signature column if it doesn't exist
+    try {
+      await sequelize.query(`
+        ALTER TABLE users 
+        ADD COLUMN signature LONGTEXT NULL
+      `);
+      console.log('Added signature column to users table');
+    } catch (error) {
+      if (error.original?.code === 'ER_DUP_FIELDNAME') {
+        console.log('signature column already exists');
+      } else {
+        console.log('Note: Could not add signature column (may already exist)');
       }
     }
 
@@ -529,6 +555,100 @@ const initializeDatabase = async () => {
       console.log('Note: Could not ensure dr_clinics table:', error.message);
     }
 
+    // Ensure procurement tables exist
+    try {
+      console.log('Checking procurement tables...');
+      
+      // Create suppliers table first
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS suppliers (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          contact_person VARCHAR(255) NULL,
+          phone VARCHAR(50) NULL,
+          email VARCHAR(255) NULL,
+          address TEXT NULL,
+          town VARCHAR(255) NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Created/verified suppliers table');
+      
+      // Add town column if it doesn't exist
+      try {
+        await sequelize.query(`
+          ALTER TABLE suppliers 
+          ADD COLUMN town VARCHAR(255) NULL
+        `);
+        console.log('Added town column to suppliers table');
+      } catch (error) {
+        if (error.original?.code === 'ER_DUP_FIELDNAME') {
+          console.log('town column already exists in suppliers table');
+        } else {
+          console.log('Note: Could not add town column (may already exist)');
+        }
+      }
+      
+      // Insert sample suppliers if table is empty
+      const [supplierCount] = await sequelize.query('SELECT COUNT(*) as count FROM suppliers');
+      if (supplierCount[0].count === 0) {
+        await sequelize.query(`
+          INSERT INTO suppliers (name, contact_person, phone, email, address, town) VALUES
+          ('Medical Supplies Co.', 'John Smith', '+211-123-456789', 'john@medsupplies.com', 'Juba, South Sudan', 'Juba'),
+          ('Pharma Distributors Ltd', 'Sarah Johnson', '+211-987-654321', 'sarah@pharmadist.com', 'Wau, South Sudan', 'Wau'),
+          ('Healthcare Equipment Inc', 'Mike Wilson', '+211-555-123456', 'mike@healthequip.com', 'Malakal, South Sudan', 'Malakal')
+        `);
+        console.log('Added sample suppliers');
+      }
+
+      // Create purchase_orders table with correct structure (preserve existing data)
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          po_number VARCHAR(50) NOT NULL UNIQUE,
+          supplier_id INT NOT NULL,
+          order_date DATE NOT NULL,
+          total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          status ENUM('draft', 'check', 'approved', 'authorized', 'received', 'cancelled') DEFAULT 'draft',
+          notes TEXT NULL,
+          check_signature LONGTEXT NULL,
+          check_signed_by VARCHAR(255) NULL,
+          check_signed_at TIMESTAMP NULL,
+          approved_signature LONGTEXT NULL,
+          approved_signed_by VARCHAR(255) NULL,
+          approved_signed_at TIMESTAMP NULL,
+          authorized_signature LONGTEXT NULL,
+          authorized_signed_by VARCHAR(255) NULL,
+          authorized_signed_at TIMESTAMP NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Created/verified purchase_orders table with correct structure');
+      
+      // Create purchase_order_items table (preserve existing data)
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          purchase_order_id INT NOT NULL,
+          item_name VARCHAR(255) NOT NULL,
+          description TEXT NULL,
+          quantity INT NOT NULL DEFAULT 1,
+          unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          total_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          unit_of_measure VARCHAR(50) NULL DEFAULT 'Each',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_purchase_order_id (purchase_order_id)
+        )
+      `);
+      console.log('Created/verified purchase_order_items table with correct structure');
+      
+    } catch (error) {
+      console.log('Note: Could not ensure procurement tables:', error.message);
+    }
+
     // Ensure pharmacy tables exist
     try {
       console.log('Checking pharmacy tables...');
@@ -538,17 +658,20 @@ const initializeDatabase = async () => {
         CREATE TABLE IF NOT EXISTS drug_inventory (
           id VARCHAR(36) PRIMARY KEY,
           drug_name VARCHAR(255) NOT NULL,
-          unit_of_measure VARCHAR(100),
+          generic_name VARCHAR(255) NULL,
+          unit_of_measure VARCHAR(100) NOT NULL DEFAULT 'Tablets',
           quantity_received INT NOT NULL DEFAULT 0,
           current_stock INT NOT NULL DEFAULT 0,
           expiry_date DATE NOT NULL,
-          batch_number VARCHAR(50),
+          batch_number VARCHAR(50) NULL,
           reorder_level INT NOT NULL DEFAULT 10,
           clinic_id INT NOT NULL,
           date_received DATE NOT NULL,
           received_by VARCHAR(36) NOT NULL,
-          unit_cost DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-          selling_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00
+          unit_cost DECIMAL(10, 2) NULL DEFAULT 0.00,
+          selling_price DECIMAL(10, 2) NULL DEFAULT 0.00,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
       `);
       console.log('Created/verified drug_inventory table');
@@ -843,6 +966,7 @@ module.exports = {
   CashTransfer,
   Supplier,
   PurchaseOrder,
+  PurchaseOrderItem,
   DailyExpense,
   initializeDatabase
 };

@@ -16,6 +16,7 @@ interface Supplier {
   phone: string;
   email: string;
   address: string;
+  town: string;
   is_active: boolean;
 }
 
@@ -28,7 +29,8 @@ const Suppliers: React.FC = () => {
     contact_person: '',
     phone: '',
     email: '',
-    address: ''
+    address: '',
+    town: ''
   });
 
   useEffect(() => {
@@ -63,7 +65,7 @@ const Suppliers: React.FC = () => {
       
       toast.success(editingSupplier ? 'Supplier updated' : 'Supplier created');
       setShowModal(false);
-      setFormData({ name: '', contact_person: '', phone: '', email: '', address: '' });
+      setFormData({ name: '', contact_person: '', phone: '', email: '', address: '', town: '' });
       setEditingSupplier(null);
       fetchSuppliers();
     } catch (error) {
@@ -78,7 +80,8 @@ const Suppliers: React.FC = () => {
       contact_person: supplier.contact_person || '',
       phone: supplier.phone || '',
       email: supplier.email || '',
-      address: supplier.address || ''
+      address: supplier.address || '',
+      town: supplier.town || ''
     });
     setShowModal(true);
   };
@@ -103,7 +106,7 @@ const Suppliers: React.FC = () => {
             <Building2 className="w-8 h-8" />
             Suppliers
           </h1>
-          <Button onClick={() => { setShowModal(true); setEditingSupplier(null); setFormData({ name: '', contact_person: '', phone: '', email: '', address: '' }); }}>
+          <Button onClick={() => { setShowModal(true); setEditingSupplier(null); setFormData({ name: '', contact_person: '', phone: '', email: '', address: '', town: '' }); }}>
             <Plus className="w-4 h-4 mr-2" />
             Add Supplier
           </Button>
@@ -122,6 +125,7 @@ const Suppliers: React.FC = () => {
                     <th className="p-3 text-left text-sm font-medium">Contact Person</th>
                     <th className="p-3 text-left text-sm font-medium">Phone</th>
                     <th className="p-3 text-left text-sm font-medium">Email</th>
+                    <th className="p-3 text-left text-sm font-medium">Town</th>
                     <th className="p-3 text-left text-sm font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -132,6 +136,7 @@ const Suppliers: React.FC = () => {
                       <td className="p-3">{supplier.contact_person}</td>
                       <td className="p-3">{supplier.phone}</td>
                       <td className="p-3">{supplier.email}</td>
+                      <td className="p-3">{supplier.town}</td>
                       <td className="p-3">
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" onClick={() => handleEdit(supplier)}>
@@ -158,23 +163,53 @@ const Suppliers: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label>Supplier Name *</Label>
-                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                <Input 
+                  value={formData.name} 
+                  onChange={e => setFormData({...formData, name: e.target.value})} 
+                  placeholder="Enter supplier company name"
+                  required 
+                />
               </div>
               <div>
                 <Label>Contact Person</Label>
-                <Input value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} />
+                <Input 
+                  value={formData.contact_person} 
+                  onChange={e => setFormData({...formData, contact_person: e.target.value})} 
+                  placeholder="Enter contact person's full name"
+                />
               </div>
               <div>
                 <Label>Phone</Label>
-                <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                <Input 
+                  value={formData.phone} 
+                  onChange={e => setFormData({...formData, phone: e.target.value})} 
+                  placeholder="e.g., +211-123-456789"
+                />
               </div>
               <div>
                 <Label>Email</Label>
-                <Input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                <Input 
+                  type="email" 
+                  value={formData.email} 
+                  onChange={e => setFormData({...formData, email: e.target.value})} 
+                  placeholder="supplier@company.com"
+                />
               </div>
               <div>
                 <Label>Address</Label>
-                <Textarea value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                <Textarea 
+                  value={formData.address} 
+                  onChange={e => setFormData({...formData, address: e.target.value})} 
+                  placeholder="Enter full street address, building number, area"
+                />
+              </div>
+              <div>
+                <Label>Town</Label>
+                <Input 
+                  value={formData.town} 
+                  onChange={e => setFormData({...formData, town: e.target.value})} 
+                  placeholder="Enter town or city name"
+                />
               </div>
               <Button type="submit" className="w-full">{editingSupplier ? 'Update' : 'Create'} Supplier</Button>
             </form>

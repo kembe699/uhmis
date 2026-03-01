@@ -32,22 +32,44 @@ router.get('/clinic/:clinicId/status/:status', async (req, res) => {
 // Add patient to queue
 router.post('/', async (req, res) => {
   try {
-    const patient = await Patient.findByPk(req.body.patient_id);
+    console.log('=== PATIENT QUEUE CREATION ===');
+    console.log('Request body:', req.body);
+    console.log('Patient ID to find:', req.body.patient_id);
+    
+    // Find patient by patient_id field (UH-1234) instead of primary key
+    const patient = await Patient.findOne({
+      where: { patient_id: req.body.patient_id }
+    });
+    
+    console.log('Patient found:', patient ? { id: patient.id, patient_id: patient.patient_id } : 'NOT FOUND');
+    
     if (!patient) {
-      return res.status(404).json({ error: 'Patient not found' });
+      console.log('Patient not found, returning 404');
+      return res.status(404).json({ error: `Patient not found with ID: ${req.body.patient_id}` });
     }
     
     // Don't create visit here - visit will be created when doctor saves in clinical page
     const queueData = {
-      ...req.body,
-      visit_id: null,
-      queue_type: req.body.queue_type || 'consultation'
+      patient_id: patient.id, // Use the database ID instead of patient identifier
+      queue_type: req.body.queue_type || 'consultation',
+      priority: req.body.priority,
+      notes: req.body.notes,
+      status: req.body.status,
+      visit_id: null
     };
+    
+    console.log('Queue data to create:', queueData);
+    
     const queueEntry = await PatientQueue.create(queueData);
+    console.log('Queue entry created successfully:', queueEntry.id);
+    
     res.status(201).json(queueEntry);
   } catch (error) {
-    console.error('Error adding patient to queue:', error);
-    res.status(500).json({ error: 'Failed to add patient to queue' });
+    console.error('=== ERROR ADDING PATIENT TO QUEUE ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to add patient to queue', details: error.message });
   }
 });
 
@@ -89,3 +111,4 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+// Force restart now

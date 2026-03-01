@@ -12,11 +12,13 @@ module.exports = (sequelize) => {
     },
     generic_name: {
       type: DataTypes.STRING(255),
-      allowNull: true
+      allowNull: true,
+      defaultValue: null
     },
     unit_of_measure: {
       type: DataTypes.STRING(100),
-      allowNull: true
+      allowNull: false,
+      defaultValue: 'Tablets'
     },
     quantity_received: {
       type: DataTypes.INTEGER,

@@ -14,6 +14,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     setMounted(true);
   }, []);
 
+  // Don't render anything on the server or until mounted
   if (!mounted) {
     return null;
   }

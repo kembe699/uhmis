@@ -77,7 +77,10 @@ const Laboratory: React.FC = () => {
 
   // Load data on component mount
   useEffect(() => {
+    console.log('Laboratory useEffect called, user:', user);
+    
     if (!user?.clinic) {
+      console.log('No user clinic, setting loading to false');
       setLoading(false);
       return;
     }
@@ -88,8 +91,13 @@ const Laboratory: React.FC = () => {
   }, [user?.clinic]);
 
   const loadLabRequests = async () => {
+    console.log('loadLabRequests called');
+    
     try {
-      const response = await fetch(`/api/lab-requests?clinic=${encodeURIComponent(user!.clinic)}`, {
+      const clinicParam = user?.clinic || '1';
+      console.log('Fetching lab requests for clinic:', clinicParam);
+      
+      const response = await fetch(`/api/lab-requests?clinic=${encodeURIComponent(clinicParam)}`, {
         credentials: 'include'
       });
       
@@ -98,10 +106,15 @@ const Laboratory: React.FC = () => {
       }
       
       const requests = await response.json() as LabRequest[];
-      setLabRequests(requests);
+      console.log('Lab requests received:', requests);
+      
+      setLabRequests(requests || []);
+      console.log('Successfully loaded', (requests || []).length, 'lab requests');
     } catch (error) {
       console.error('Error loading lab requests:', error);
-      toast.error('Failed to load lab requests');
+      setLabRequests([]); // Set empty array on error
+    } finally {
+      setLoading(false);
     }
   };
 

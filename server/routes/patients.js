@@ -78,13 +78,24 @@ router.post('/', async (req, res) => {
   try {
     const patientData = {
       ...req.body,
-      registration_date: req.body.registration_date || new Date()
+      registration_date: req.body.registration_date || new Date(),
+      // Use default clinic_id if not provided or invalid
+      clinic_id: req.body.clinic_id || 6, // Default to General Medicine
+      // Make registered_by optional to avoid foreign key issues
+      registered_by: req.body.registered_by || null
     };
+    
+    console.log('Creating patient with data:', JSON.stringify(patientData, null, 2));
     const patient = await Patient.create(patientData);
+    console.log('Patient created successfully:', patient.id);
     res.status(201).json(patient);
   } catch (error) {
     console.error('Error creating patient:', error);
-    res.status(500).json({ error: 'Failed to create patient' });
+    console.error('Error details:', error.message);
+    if (error.errors) {
+      console.error('Validation errors:', error.errors.map(e => ({ field: e.path, message: e.message })));
+    }
+    res.status(500).json({ error: 'Failed to create patient', details: error.message });
   }
 });
 

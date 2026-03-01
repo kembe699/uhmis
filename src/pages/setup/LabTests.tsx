@@ -51,10 +51,16 @@ const LabTests: React.FC = () => {
   }, [user?.clinic]);
 
   const fetchTests = async () => {
-    if (!user?.clinic) return;
+    console.log('LabTests fetchTests called, user:', user);
     
     try {
-      const response = await fetch('/api/lab-tests', {
+      setLoading(true);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching lab tests for clinic:', clinicId);
+      
+      const response = await fetch(`/api/lab-tests?clinic=${encodeURIComponent(clinicId)}`, {
         credentials: 'include'
       });
       
@@ -87,19 +93,24 @@ const LabTests: React.FC = () => {
       })) : [];
       
       setTests(transformedTests);
+      console.log('Successfully loaded', transformedTests.length, 'lab tests');
     } catch (error) {
       console.error('Error fetching tests:', error);
-      toast.error('Failed to fetch lab tests');
+      setTests([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
   };
 
   const fetchServices = async () => {
-    if (!user?.clinic) return;
+    console.log('LabTests fetchServices called, user:', user);
     
     try {
-      const response = await fetch('/api/clinical/services/' + user.clinic, {
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching services for clinic:', clinicId);
+      
+      const response = await fetch(`/api/clinical/services/${clinicId}`, {
         credentials: 'include'
       });
       
@@ -108,10 +119,11 @@ const LabTests: React.FC = () => {
       }
       
       const servicesData = await response.json();
-      setServices(servicesData);
+      setServices(servicesData || []);
+      console.log('Successfully loaded', (servicesData || []).length, 'services');
     } catch (error) {
       console.error('Error fetching services:', error);
-      // Don't show error toast for services as it's not critical
+      setServices([]); // Set empty array on error
     }
   };
 

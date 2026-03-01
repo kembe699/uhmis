@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { FixedSizeList as List } from 'react-window';
+// import { FixedSizeList as List } from 'react-window';
 import '@/styles/instant-performance.css';
 import { useAuth } from '@/contexts/AuthContext.mysql.pure';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -268,7 +268,7 @@ const MedicineRow = memo(({
       )}
     </td>
     <td className="p-2">{item.current_stock}</td>
-    <td className="p-2">SSP {parseFloat(item.selling_price || '0').toFixed(2)}</td>
+    <td className="p-2">SSP {parseFloat(String(item.selling_price || '0')).toFixed(2)}</td>
     <td className="p-2">
       <Button
         size="sm"
@@ -1544,7 +1544,17 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
   };
 
   useEffect(() => {
+    console.log('Pharmacy useEffect triggered, user:', user);
+    console.log('User clinic:', user?.clinic);
+    
     if (user?.clinic) {
+      console.log('User has clinic, calling fetchData...');
+      fetchData();
+    } else {
+      console.log('No user clinic found, using default clinic 1');
+      // Use default clinic if user clinic not available
+      const defaultUser = { ...user, clinic: '1' };
+      console.log('Using default user:', defaultUser);
       fetchData();
     }
   }, [user?.clinic]);
@@ -1569,21 +1579,29 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
   }, [loadInventory]);
 
   const fetchData = async () => {
-    if (!user?.clinic) return;
+    console.log('Pharmacy fetchData called, user:', user);
     
-    setLoading(true);
     try {
+      setLoading(true);
+      
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching pharmacy data for clinic:', clinicId);
+      
       // Load inventory immediately for dispense modal
-      const inventoryData = await pharmacyApi.getInventory(user.clinic);
-      setInventory(inventoryData);
+      const inventoryData = await pharmacyApi.getInventory(clinicId);
+      console.log('Inventory data received:', inventoryData);
+      setInventory(inventoryData || []);
       setLoading(false);
       
       // Lazy load other data in the background
       Promise.all([
-        pharmacyApi.getDispensingHistory(user.clinic),
-        pharmacyApi.getPatients(user.clinic),
-        pharmacyApi.getPrescriptions(user.clinic)
+        pharmacyApi.getDispensingHistory(clinicId),
+        pharmacyApi.getPatients(clinicId),
+        pharmacyApi.getPrescriptions(clinicId)
       ]).then(([dispensingData, patientsData, prescriptionsData]) => {
+        console.log('Background data loaded:', { dispensingData, patientsData, prescriptionsData });
+        
         setDispensingHistory(Array.isArray(dispensingData) ? dispensingData : []);
         setPrescriptions(Array.isArray(prescriptionsData) ? prescriptionsData : []);
         
@@ -1609,41 +1627,63 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
             lastName: lastName,
             age: patient.age || 0,
             phoneNumber: patient.phone || patient.phone_number || '',
-            clinic: user.clinic
+            clinic: clinicId
           };
         });
         
-        setPatients(transformedPatients);
+        setPatients(transformedPatients as Patient[]);
       }).catch(error => {
         console.error('Error loading background data:', error);
-        // Don't show error toast for background loading
+        // Set empty arrays on background loading error
+        setDispensingHistory([]);
+        setPrescriptions([]);
+        setPatients([]);
       });
       
     } catch (error) {
       console.error('Error fetching pharmacy data:', error);
-      toast.error('Failed to load pharmacy data');
+      // Set empty arrays on error
+      setInventory([]);
+      setDispensingHistory([]);
+      setPrescriptions([]);
+      setPatients([]);
+    } finally {
       setLoading(false);
     }
   };
 
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.clinic) return;
+    console.log('=== ADD STOCK FORM SUBMITTED ===');
+    console.log('Form event:', e);
+    console.log('User clinic:', user?.clinic);
+    console.log('Current newStock data:', newStock);
+    console.log('Is edit mode:', isEditMode);
+    
+    if (!user?.clinic) {
+      console.error('No user clinic found, cannot add stock');
+      toast.error('User clinic not found. Please refresh and try again.');
+      return;
+    }
 
     try {
       setSaving(true);
+      console.log('Setting saving to true...');
       
       // Check for duplicate brand name when adding new stock
       if (!isEditMode) {
+        console.log('Checking for duplicate drugs...');
         const duplicateDrug = inventory.find(
           item => item.drug_name.toLowerCase().trim() === newStock.drug_name.toLowerCase().trim()
         );
         
         if (duplicateDrug) {
+          console.log('Duplicate drug found:', duplicateDrug);
           toast.error(`Drug "${newStock.drug_name}" already exists in inventory. Please update the existing stock instead.`);
           setSaving(false);
           return;
         }
+        console.log('No duplicate drugs found, proceeding...');
       }
       
       // Prepare data to match DrugInventory model requirements
@@ -1664,14 +1704,19 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
       };
 
       console.log('Sending stock data:', stockData);
+      console.log('About to call API...');
       
       if (isEditMode && editingItem) {
         // Update existing item
+        console.log('Updating existing item with ID:', editingItem.id);
         await pharmacyApi.updateInventoryItem(editingItem.id, stockData);
+        console.log('Update API call completed successfully');
         toast.success('Stock updated successfully');
       } else {
         // Add new item
-        await pharmacyApi.addInventoryItem(stockData);
+        console.log('Adding new inventory item...');
+        const result = await pharmacyApi.addInventoryItem(stockData);
+        console.log('Add API call completed successfully, result:', result);
         toast.success('Stock added successfully');
       }
       
@@ -1693,9 +1738,13 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
       });
       fetchData();
     } catch (error) {
-      console.error('Error saving stock:', error);
-      toast.error(`Failed to ${isEditMode ? 'update' : 'add'} stock. Please check all required fields.`);
+      console.error('=== ERROR SAVING STOCK ===');
+      console.error('Error details:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      toast.error(`Failed to ${isEditMode ? 'update' : 'add'} stock. Error: ${error.message}`);
     } finally {
+      console.log('Setting saving to false...');
       setSaving(false);
     }
   };
@@ -2223,8 +2272,14 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                                       <Button
                                         size="sm"
                                         onClick={() => {
-                                          // Find the patient
-                                          const patient = patients.find(p => p.id === group.patient_id);
+                                          // Use patient data directly from prescription group instead of lookup
+                                          const patient = {
+                                            id: group.patient_id,
+                                            patientId: group.patient_id,
+                                            fullName: group.patient_name
+                                          };
+                                          
+                                          console.log('Using patient from prescription group:', patient);
                                           
                                           if (patient) {
                                             // Get all active prescriptions for this patient
@@ -2244,8 +2299,8 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                                                   inventoryId: drug.id,
                                                   drugName: drug.drug_name,
                                                   quantity: parseInt(prescription.quantity) || 1,
-                                                  unitPrice: typeof drug.selling_price === 'number' ? drug.selling_price : parseFloat(drug.selling_price.toString()) || 0,
-                                                  totalPrice: (parseInt(prescription.quantity) || 1) * (typeof drug.selling_price === 'number' ? drug.selling_price : parseFloat(drug.selling_price.toString()) || 0),
+                                                  unitPrice: typeof drug.selling_price === 'number' ? drug.selling_price : parseFloat(String(drug.selling_price)) || 0,
+                                                  totalPrice: (parseInt(prescription.quantity) || 1) * (typeof drug.selling_price === 'number' ? drug.selling_price : parseFloat(String(drug.selling_price)) || 0),
                                                   availableStock: drug.current_stock
                                                 });
                                                 prescriptionIds.push(prescription.id);
@@ -2466,7 +2521,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Stock Value</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">SSP {inventory.reduce((sum, item) => sum + (item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(item.selling_price?.toString() || '0'))), 0).toFixed(2)}</div>
+                  <div className="text-2xl font-bold">SSP {inventory.reduce((sum, item) => sum + (item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(String(item.selling_price || '0')))), 0).toFixed(2)}</div>
                   <p className="text-xs text-muted-foreground mt-1">Total value</p>
                 </CardContent>
               </Card>
@@ -2505,7 +2560,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                       const csvRows = [headers.join(',')];
                       
                       inventory.forEach(item => {
-                        const stockValue = item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(item.selling_price?.toString() || '0'));
+                        const stockValue = item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(String(item.selling_price || '0')));
                         const isLow = item.current_stock <= item.reorder_level;
                         const isOut = item.current_stock === 0;
                         const status = isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'In Stock';
@@ -2516,8 +2571,8 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                           item.current_stock,
                           item.unit_of_measure,
                           item.reorder_level,
-                          (typeof item.unit_cost === 'number' ? item.unit_cost : parseFloat(item.unit_cost?.toString() || '0')).toFixed(2),
-                          (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(item.selling_price?.toString() || '0')).toFixed(2),
+                          (typeof item.unit_cost === 'number' ? item.unit_cost : parseFloat(String(item.unit_cost || '0'))).toFixed(2),
+                          (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(String(item.selling_price || '0'))).toFixed(2),
                           stockValue.toFixed(2),
                           `"${item.batch_number || '-'}"`,
                           item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '-',
@@ -2569,7 +2624,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                       </thead>
                       <tbody>
                         {inventory.map((item) => {
-                          const stockValue = item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(item.selling_price?.toString() || '0'));
+                          const stockValue = item.current_stock * (typeof item.selling_price === 'number' ? item.selling_price : parseFloat(String(item.selling_price || '0')));
                           const isLow = item.current_stock <= item.reorder_level;
                           const isOut = item.current_stock === 0;
                           return (
@@ -2579,8 +2634,8 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventoryOnly = false }) => {
                               <td className="p-2"><span className={`font-semibold ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : 'text-green-600'}`}>{item.current_stock}</span></td>
                               <td className="p-2">{item.unit_of_measure}</td>
                               <td className="p-2">{item.reorder_level}</td>
-                              <td className="p-2">SSP {(typeof item.unit_cost === 'number' ? item.unit_cost : parseFloat(item.unit_cost?.toString() || '0')).toFixed(2)}</td>
-                              <td className="p-2">SSP {(typeof item.selling_price === 'number' ? item.selling_price : parseFloat(item.selling_price?.toString() || '0')).toFixed(2)}</td>
+                              <td className="p-2">SSP {(typeof item.unit_cost === 'number' ? item.unit_cost : parseFloat(String(item.unit_cost || '0'))).toFixed(2)}</td>
+                              <td className="p-2">SSP {(typeof item.selling_price === 'number' ? item.selling_price : parseFloat(String(item.selling_price || '0'))).toFixed(2)}</td>
                               <td className="p-2 font-semibold">SSP {stockValue.toFixed(2)}</td>
                               <td className="p-2 text-xs">{item.batch_number || '-'}</td>
                               <td className="p-2 text-xs">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : '-'}</td>

@@ -180,11 +180,20 @@ const Dashboard: React.FC = () => {
   };
 
   const fetchStats = async () => {
+    console.log('fetchStats called, user:', user);
+    
     try {
+      setLoading(true);
+      
       // Use user's clinic or default to 1 if not set
       const clinicId = user?.clinic || '1';
+      console.log('Fetching stats for clinic:', clinicId);
+      
       const stats = await dashboardApi.getStats(clinicId);
+      console.log('Stats data received:', stats);
+      
       setStats(stats);
+      console.log('Successfully loaded dashboard stats');
     } catch (error) {
       console.error('Error fetching stats:', error);
       // Set default stats on error

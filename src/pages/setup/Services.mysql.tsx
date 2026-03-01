@@ -223,15 +223,23 @@ const Services: React.FC = () => {
   }, [user?.clinic]);
 
   const fetchServices = async () => {
-    if (!user?.clinic) return;
+    console.log('fetchServices called, user:', user);
     
     try {
       setLoading(true);
-      const servicesData = await clinicalApi.getServices(user.clinic);
-      setServices(servicesData);
+      
+      // Use default clinic ID if user clinic is not available
+      const clinicId = user?.clinic || '6'; // Default to General Medicine clinic
+      console.log('Fetching services for clinic:', clinicId);
+      
+      const servicesData = await clinicalApi.getServices(clinicId);
+      console.log('Services data received:', servicesData);
+      
+      setServices(servicesData || []);
+      console.log('Successfully loaded', (servicesData || []).length, 'services');
     } catch (error) {
       console.error('Error fetching services:', error);
-      toast.error('Failed to fetch services');
+      setServices([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

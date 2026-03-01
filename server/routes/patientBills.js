@@ -269,18 +269,32 @@ router.post('/:billId/payments', async (req, res) => {
     console.log('paidServiceIndexes received:', paymentData.paidServiceIndexes);
     console.log('All payment data keys:', Object.keys(paymentData));
     
-    // Check for active cashier shift
+    // Check for active cashier shift for the current user
     const { CashierShift } = require('../models');
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      console.log('Validation failed: No authenticated user');
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        requiresAuth: true
+      });
+    }
+    
     const activeShift = await CashierShift.findOne({
-      where: { status: 'open' },
+      where: { 
+        cashier_id: userId,
+        status: 'open' 
+      },
       order: [['start_time', 'DESC']]
     });
     
     if (!activeShift) {
-      console.log('Validation failed: No active cashier shift');
+      console.log('Validation failed: No active cashier shift for user:', userId);
       return res.status(403).json({ 
         error: 'No active cashier shift found. Please start a cashier shift before making payments.',
-        requiresShift: true
+        requiresShift: true,
+        userId: userId
       });
     }
     

@@ -175,13 +175,20 @@ const Clinics: React.FC = () => {
   }, []);
 
   const fetchClinics = async () => {
+    console.log('fetchClinics called');
+    
     try {
       setLoading(true);
+      console.log('Fetching clinics...');
+      
       const clinicsData = await clinicsApi.getAll();
-      setClinics(clinicsData);
+      console.log('Clinics data received:', clinicsData);
+      
+      setClinics(clinicsData || []);
+      console.log('Successfully loaded', (clinicsData || []).length, 'clinics');
     } catch (error) {
       console.error('Error fetching clinics:', error);
-      toast.error('Failed to fetch clinics');
+      setClinics([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

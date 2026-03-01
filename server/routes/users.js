@@ -188,4 +188,51 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Get user signature
+router.get('/:id/signature', async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (user.signature) {
+      res.json({ signature: user.signature });
+    } else {
+      res.status(404).json({ error: 'No signature found' });
+    }
+  } catch (error) {
+    console.error('Error fetching user signature:', error);
+    res.status(500).json({ error: 'Failed to fetch signature' });
+  }
+});
+
+// Save user signature
+router.post('/:id/signature', async (req, res) => {
+  try {
+    const { signature } = req.body;
+    
+    if (!signature) {
+      return res.status(400).json({ error: 'Signature data is required' });
+    }
+    
+    const [updatedRows] = await User.update(
+      { 
+        signature: signature,
+        updated_at: new Date()
+      },
+      { where: { id: req.params.id } }
+    );
+    
+    if (updatedRows === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ message: 'Signature saved successfully' });
+  } catch (error) {
+    console.error('Error saving user signature:', error);
+    res.status(500).json({ error: 'Failed to save signature' });
+  }
+});
+
 module.exports = router;

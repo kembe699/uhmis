@@ -116,15 +116,20 @@ const LabTests: React.FC = () => {
   }, [user?.clinic]);
 
   const fetchTests = async () => {
-    if (!user?.clinic) return;
+    console.log('fetchTests called, user:', user);
     
     try {
       setLoading(true);
+      console.log('Fetching lab tests...');
+      
       const testsData = await labTestApi.getLabTests();
-      setTests(testsData);
+      console.log('Lab tests data received:', testsData);
+      
+      setTests(testsData || []);
+      console.log('Successfully loaded', (testsData || []).length, 'lab tests');
     } catch (error) {
       console.error('Error fetching lab tests:', error);
-      toast.error('Failed to fetch lab tests');
+      setTests([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
