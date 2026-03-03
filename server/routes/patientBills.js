@@ -607,9 +607,16 @@ async function createLabRequestsFromBill(billData, bill) {
       'hemoglobin', 'wbc', 'rbc', 'platelet', 'esr', 'bilirubin'
     ];
     
+    console.log('All services in bill:', services.map(s => ({
+      name: s.serviceName || s.name || s.service_name,
+      originalService: s
+    })));
+    
     const labServices = services.filter(service => {
       const serviceName = (service.serviceName || service.name || service.service_name || '').toLowerCase();
-      return labTestKeywords.some(keyword => serviceName.includes(keyword));
+      const isLabTest = labTestKeywords.some(keyword => serviceName.includes(keyword));
+      console.log(`Service "${serviceName}" is lab test: ${isLabTest}`);
+      return isLabTest;
     });
     
     if (labServices.length === 0) {

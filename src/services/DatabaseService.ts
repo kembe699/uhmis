@@ -9,8 +9,8 @@ import { User, Patient, LabTest, Visit } from "@/types";
 interface IRepository<T> {
   findById(id: string): Promise<T | null>;
   findAll(): Promise<T[]>;
-  create(data: any): Promise<T>;
-  update(id: string, data: any): Promise<boolean>;
+  create(data: Partial<T>): Promise<T>;
+  update(id: string, data: Partial<T>): Promise<boolean>;
   delete(id: string): Promise<boolean>;
 }
 
@@ -59,14 +59,14 @@ abstract class BaseService<T> implements IRepository<T> {
     return this.fetchApi('/');
   }
 
-  async create(data: any): Promise<T> {
+  async create(data: Partial<T>): Promise<T> {
     return this.fetchApi('/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async update(id: string, data: any): Promise<boolean> {
+  async update(id: string, data: T): Promise<boolean> {
     await this.fetchApi(`/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),

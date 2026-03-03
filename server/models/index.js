@@ -391,6 +391,11 @@ const initializeDatabase = async () => {
           console.log('Added updated_at column to lab_tests table');
         }
         
+        if (!columnNames.includes('is_active')) {
+          await sequelize.query("ALTER TABLE lab_tests ADD COLUMN is_active BOOLEAN DEFAULT TRUE");
+          console.log('Added is_active column to lab_tests table');
+        }
+        
         // Remove foreign key constraint on created_by if it exists
         try {
           const [constraints] = await sequelize.query(`
@@ -411,7 +416,7 @@ const initializeDatabase = async () => {
           console.log('Note: Could not check/remove foreign key constraint on created_by:', fkError.message);
         }
         
-        if (columnNames.includes('price') && columnNames.includes('service_id') && columnNames.includes('created_by') && columnNames.includes('created_at') && columnNames.includes('updated_at')) {
+        if (columnNames.includes('price') && columnNames.includes('service_id') && columnNames.includes('created_by') && columnNames.includes('created_at') && columnNames.includes('updated_at') && columnNames.includes('is_active')) {
           console.log('lab_tests table already has all required columns');
         }
       }

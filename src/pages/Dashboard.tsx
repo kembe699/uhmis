@@ -21,7 +21,7 @@ class DashboardApiClient {
 class PatientApiClient {
   private baseUrl = '/api/patients';
 
-  async create(patientData: any): Promise<any> {
+  async create(patientData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const response = await fetch(this.baseUrl, {
         method: 'POST',

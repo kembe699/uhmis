@@ -38,7 +38,7 @@ class ClinicalApiClient {
     }
   }
 
-  async createVisit(visitData: any): Promise<any> {
+  async createVisit(visitData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const response = await fetch(`${this.baseUrl}/visits`, {
         method: 'POST',
@@ -75,7 +75,7 @@ class ClinicalApiClient {
     }
   }
 
-  async createPrescription(prescriptionData: any): Promise<any> {
+  async createPrescription(prescriptionData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const response = await fetch(`${this.baseUrl}/prescriptions`, {
         method: 'POST',
@@ -129,7 +129,7 @@ class ClinicalApiClient {
     }
   }
 
-  async createService(serviceData: any): Promise<any> {
+  async createService(serviceData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const response = await fetch(`${this.baseUrl}/services`, {
         method: 'POST',
@@ -144,7 +144,7 @@ class ClinicalApiClient {
     }
   }
 
-  async updateService(serviceId: number, serviceData: any): Promise<any> {
+  async updateService(serviceId: number, serviceData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
       const response = await fetch(`${this.baseUrl}/services/${serviceId}`, {
         method: 'PUT',
@@ -754,7 +754,7 @@ const Clinical: React.FC = () => {
   };
 
   // Function to create lab requests
-  const createLabRequests = async (visit: any, labTests: string[]) => {
+  const createLabRequests = async (visit: Record<string, unknown>, labTests: string[]) => {
     try {
       console.log('Creating lab requests for visit:', visit.id, 'tests:', labTests);
       
@@ -769,8 +769,8 @@ const Clinical: React.FC = () => {
           let testDetails = null;
           if (searchResponse.ok) {
             const searchResults = await searchResponse.json();
-            testDetails = searchResults.find((test: any) => 
-              test.test_name.toLowerCase() === testName.toLowerCase()
+            testDetails = searchResults.find((test: Record<string, unknown>) => 
+              (test.test_name as string)?.toLowerCase() === testName.toLowerCase()
             );
           }
           
@@ -778,7 +778,7 @@ const Clinical: React.FC = () => {
           const labRequestData = {
             patient_id: visit.patient_id || visit.patientId,
             patient_name: visit.patient_name || visit.patientName || selectedPatient?.fullName || 'Unknown Patient',
-            clinic_id: parseInt(visit.clinic_id || visit.clinic || user?.clinic),
+            clinic_id: parseInt((visit.clinic_id || visit.clinic || user?.clinic) as string),
             test_id: testDetails?.id || null,
             test_name: testName,
             test_code: testDetails?.test_code || testName.substring(0, 3).toUpperCase(),

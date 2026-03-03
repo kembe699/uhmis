@@ -90,10 +90,10 @@ router.get('/search', async (req, res) => {
     try {
       const [results] = await sequelize.query(`
         SELECT * FROM lab_tests 
-        WHERE test_name LIKE ? AND is_active = 1
+        WHERE test_name LIKE ? 
         ORDER BY test_name ASC
       `, {
-        replacements: [`%${q}%`]
+        replacements: [`%${query}%`]
       });
       
       console.log(`Fallback search found ${results.length} lab tests`);
@@ -114,8 +114,7 @@ router.get('/clinic/:clinicId', async (req, res) => {
   try {
     const labTests = await LabTest.findAll({
       where: { 
-        clinic_id: req.params.clinicId,
-        is_active: true 
+        clinic_id: req.params.clinicId
       },
       include: [{
         model: LabTestComponent,

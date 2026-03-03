@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'reception' | 'doctor' | 'lab' | 'pharmacy' | 'reports' | 'cashier';
 
-export type ClinicName = 'Universal Hospital';
+export type ClinicName = 'Universal Hospital' | string;
 
 export interface User {
   uid: string;

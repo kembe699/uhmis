@@ -1128,7 +1128,6 @@ const PatientsBill: React.FC = () => {
                   <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Patient Details</th>
                   <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Amount</th>
                   <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Payment</th>
-                  <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Status</th>
                   <th className="text-right py-3 px-4 font-semibold text-sm text-foreground">Actions</th>
                 </tr>
               </thead>

@@ -66,6 +66,21 @@ class PatientApiClient {
       throw error;
     }
   }
+
+  async update(patientId: string, patientData: Partial<MySQLPatient>): Promise<MySQLPatient> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${patientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patientData),
+      });
+      if (!response.ok) throw new Error('Failed to update patient');
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      throw error;
+    }
+  }
 }
 
 // MySQL API client for users
@@ -206,7 +221,8 @@ import {
   Check,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Edit
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -258,6 +274,8 @@ const Patients: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showQueueForm, setShowQueueForm] = useState(false);
   const [registeredPatient, setRegisteredPatient] = useState<any>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [doctors, setDoctors] = useState<Array<{displayName: string, role: string}>>([]);
   const [clinics, setClinics] = useState<Array<{id: string, name: string, department: string, service?: string}>>([]);
   const [queuedPatients, setQueuedPatients] = useState<Set<string>>(new Set());
@@ -295,7 +313,6 @@ const Patients: React.FC = () => {
       fetchPatients();
       fetchUsers();
       fetchClinics();
-      fetchQueueStatus();
     } else {
       setLoading(false);
     }
@@ -346,6 +363,9 @@ const Patients: React.FC = () => {
       console.log('Transformed data:', transformedData);
       setPatients(transformedData);
       console.log('Successfully loaded', transformedData.length, 'patients');
+      
+      // Fetch queue status with the transformed patient data
+      await fetchQueueStatus(transformedData);
     } catch (error) {
       console.error('Error fetching patients:', error);
       toast.error('Failed to load patients');
@@ -444,7 +464,7 @@ const Patients: React.FC = () => {
     }
   };
 
-  const fetchQueueStatus = async () => {
+  const fetchQueueStatus = async (patientData: Patient[]) => {
     if (!user?.clinic) return;
     
     try {
@@ -461,13 +481,13 @@ const Patients: React.FC = () => {
       const statusMap = new Map<string, string>();
       
       queueEntries.forEach(entry => {
-        const dbPatientId = entry.patient_id; // This is now the database ID
+        const dbPatientId = entry.patient_id; // This is the database ID
         const status = entry.status;
         
         console.log(`Processing queue entry: DB Patient ID ${dbPatientId} has status ${status}`);
         
-        // Find the patient identifier (UH-1234) that matches this database ID
-        const patient = patients.find(p => p.id === dbPatientId);
+        // Find the patient that matches this database ID
+        const patient = patientData.find(p => p.id === dbPatientId);
         if (patient) {
           const patientIdentifier = patient.patientId; // UH-1234 format
           console.log(`Mapped DB ID ${dbPatientId} to patient identifier ${patientIdentifier}`);
@@ -485,6 +505,7 @@ const Patients: React.FC = () => {
           statusMap.set(patientIdentifier, status);
         } else {
           console.log(`Could not find patient with DB ID ${dbPatientId} in current patient list`);
+          console.log('Available patient IDs:', patientData.map(p => ({ id: p.id, patientId: p.patientId })));
         }
       });
       
@@ -710,7 +731,7 @@ const Patients: React.FC = () => {
       });
       
       // Refresh queue status to update button states
-      fetchQueueStatus();
+      await fetchPatients();
     } catch (error) {
       console.error('Error queuing patient:', error);
       toast.error('Failed to queue patient');
@@ -925,66 +946,88 @@ const Patients: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {(() => {
-                          const queueStatus = patientQueueStatus.get(patient.patientId);
-                          const isQueued = queuedPatients.has(patient.patientId);
-                          
-                          if (isQueued) {
-                            // Patient is in queue (waiting or in_progress)
-                            return (
-                              <Button
-                                size="sm"
-                                disabled
-                                className="bg-blue-600 text-white shadow-sm cursor-default"
-                              >
-                                <Check className="w-4 h-4 mr-2" />
-                                Queued
-                              </Button>
-                            );
-                          } else if (queueStatus === 'completed' || queueStatus === 'cancelled') {
-                            // Patient was in queue but now completed/cancelled - show normal button
-                            return (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  setRegisteredPatient({
-                                    patientId: patient.patientId,
-                                    patientDocId: patient.id,
-                                    patientName: patient.fullName,
-                                    age: patient.age,
-                                    clinic: patient.clinic
-                                  });
-                                  setShowQueueForm(true);
-                                }}
-                                className="bg-success hover:bg-success/90 text-white shadow-sm"
-                              >
-                                <Activity className="w-4 h-4 mr-2" />
-                                Add to Queue
-                              </Button>
-                            );
-                          } else {
-                            // Patient never been in queue - show normal button
-                            return (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  setRegisteredPatient({
-                                    patientId: patient.patientId,
-                                    patientDocId: patient.id,
-                                    patientName: patient.fullName,
-                                    age: patient.age,
-                                    clinic: patient.clinic
-                                  });
-                                  setShowQueueForm(true);
-                                }}
-                                className="bg-success hover:bg-success/90 text-white shadow-sm"
-                              >
-                                <Activity className="w-4 h-4 mr-2" />
-                                Add to Queue
-                              </Button>
-                            );
-                          }
-                        })()}
+                        <div className="flex items-center gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setEditingPatient(patient);
+                              setFormData({
+                                fullName: patient.fullName || '',
+                                age: patient.age?.toString() || '',
+                                dateOfBirth: patient.dateOfBirth || '',
+                                gender: patient.gender || '',
+                                occupation: patient.occupation || '',
+                                phoneNumber: patient.phoneNumber || '',
+                                beneficiaryType: 'local_residents'
+                              });
+                              setShowEditForm(true);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                            title="Edit Patient Details"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          {(() => {
+                            const queueStatus = patientQueueStatus.get(patient.patientId);
+                            const isQueued = queuedPatients.has(patient.patientId);
+                            
+                            if (isQueued) {
+                              // Patient is in queue (waiting or in_progress)
+                              return (
+                                <Button
+                                  size="sm"
+                                  disabled
+                                  className="bg-blue-600 text-white shadow-sm cursor-default"
+                                >
+                                  <Check className="w-4 h-4 mr-2" />
+                                  Queued
+                                </Button>
+                              );
+                            } else if (queueStatus === 'completed' || queueStatus === 'cancelled') {
+                              // Patient was in queue but now completed/cancelled - show normal button
+                              return (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setRegisteredPatient({
+                                      patientId: patient.patientId,
+                                      patientDocId: patient.id,
+                                      patientName: patient.fullName,
+                                      age: patient.age,
+                                      clinic: patient.clinic
+                                    });
+                                    setShowQueueForm(true);
+                                  }}
+                                  className="bg-success hover:bg-success/90 text-white shadow-sm"
+                                >
+                                  <Activity className="w-4 h-4 mr-2" />
+                                  Queue
+                                </Button>
+                              );
+                            } else {
+                              // Patient never been in queue - show normal button
+                              return (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setRegisteredPatient({
+                                      patientId: patient.patientId,
+                                      patientDocId: patient.id,
+                                      patientName: patient.fullName,
+                                      age: patient.age,
+                                      clinic: patient.clinic
+                                    });
+                                    setShowQueueForm(true);
+                                  }}
+                                  className="bg-success hover:bg-success/90 text-white shadow-sm"
+                                >
+                                  <Activity className="w-4 h-4 mr-2" />
+                                  Queue
+                                </Button>
+                              );
+                            }
+                          })()}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1238,6 +1281,186 @@ const Patients: React.FC = () => {
                   </div>
                 </form>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Patient Dialog */}
+        <Dialog open={showEditForm} onOpenChange={setShowEditForm}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="w-5 h-5 text-primary" />
+                Edit Patient Details
+              </DialogTitle>
+              <DialogDescription>
+                Update patient information. All fields marked with * are required.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {editingPatient && (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                
+                try {
+                  const [firstName, ...lastNameParts] = formData.fullName.trim().split(' ');
+                  const lastName = lastNameParts.join(' ') || firstName;
+                  
+                  const updateData = {
+                    first_name: firstName,
+                    last_name: lastName,
+                    date_of_birth: formData.dateOfBirth || calculateDateOfBirthFromAge(parseInt(formData.age) || 0),
+                    gender: formData.gender as 'male' | 'female' | 'other',
+                    phone_number: formData.phoneNumber,
+                    occupation: formData.occupation,
+                  };
+                  
+                  await patientApi.update(editingPatient.id, updateData);
+                  
+                  toast.success('Patient details updated successfully!');
+                  setShowEditForm(false);
+                  setEditingPatient(null);
+                  setFormData({
+                    fullName: '',
+                    age: '',
+                    dateOfBirth: '',
+                    gender: '',
+                    occupation: '',
+                    phoneNumber: '',
+                    beneficiaryType: 'local_residents'
+                  });
+                  
+                  // Refresh patients list
+                  await fetchPatients();
+                } catch (error) {
+                  console.error('Error updating patient:', error);
+                  toast.error('Failed to update patient details. Please try again.');
+                } finally {
+                  setSaving(false);
+                }
+              }} className="space-y-4">
+                {/* Essential Information Only */}
+                <div className="form-field">
+                  <Label className="form-label">Full Name *</Label>
+                  <Input
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    placeholder="Enter patient's full name"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="form-field">
+                    <Label className="form-label">Age</Label>
+                    <Input
+                      type="number"
+                      value={formData.age}
+                      onChange={(e) => {
+                        const age = e.target.value;
+                        const calculatedDob = age ? calculateDateOfBirthFromAge(parseInt(age)) : '';
+                        setFormData({ ...formData, age, dateOfBirth: calculatedDob });
+                      }}
+                      placeholder="Enter age"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <Label className="form-label">OR Date of Birth</Label>
+                    <Input
+                      type="date"
+                      value={formData.dateOfBirth}
+                      onChange={(e) => {
+                        const dateOfBirth = e.target.value;
+                        const calculatedAge = dateOfBirth ? calculateAgeFromDateOfBirth(dateOfBirth).toString() : '';
+                        setFormData({ ...formData, dateOfBirth, age: calculatedAge });
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="form-field">
+                    <Label className="form-label">Gender</Label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full p-3 border border-border rounded-lg bg-background text-sm"
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <Label className="form-label">Phone Number</Label>
+                    <Input
+                      value={formData.phoneNumber}
+                      onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="form-field">
+                    <Label className="form-label">Occupation</Label>
+                    <Input
+                      value={formData.occupation}
+                      onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                      placeholder="e.g., Engineer, Driver"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <Label className="form-label">Beneficiary Type</Label>
+                    <select
+                      value={formData.beneficiaryType}
+                      onChange={(e) => setFormData({ ...formData, beneficiaryType: e.target.value })}
+                      className="w-full p-3 border border-border rounded-lg bg-background text-sm"
+                    >
+                      <option value="local_residents">Local Residents</option>
+                      <option value="dpoc_staff">DPOC Staff</option>
+                      <option value="contractors">Contractors</option>
+                      <option value="arm_group">Arm Group (Police, NSS & SSPDF)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowEditForm(false);
+                      setEditingPatient(null);
+                      setFormData({
+                        fullName: '',
+                        age: '',
+                        dateOfBirth: '',
+                        gender: '',
+                        occupation: '',
+                        phoneNumber: '',
+                        beneficiaryType: 'local_residents'
+                      });
+                    }}
+                    className="flex-1"
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={saving || !formData.fullName.trim()}
+                  >
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : null}
+                    Update Patient
+                  </Button>
+                </div>
+              </form>
             )}
           </DialogContent>
         </Dialog>

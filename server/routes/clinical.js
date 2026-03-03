@@ -685,4 +685,56 @@ async function createLabRequestsFromVisit(visitData, visit) {
   }
 }
 
+// Get visit by ID
+router.get('/visits/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const visit = await Visit.findByPk(id);
+    
+    if (!visit) {
+      return res.status(404).json({ error: 'Visit not found' });
+    }
+    
+    res.json(visit);
+  } catch (error) {
+    console.error('Error fetching visit:', error);
+    res.status(500).json({ error: 'Failed to fetch visit' });
+  }
+});
+
+// Get all visits for a clinic
+router.get('/visits/clinic/:clinicId', async (req, res) => {
+  try {
+    const { clinicId } = req.params;
+    
+    const visits = await Visit.findAll({
+      where: { clinic_id: parseInt(clinicId) },
+      order: [['created_at', 'DESC']]
+    });
+    
+    res.json(visits);
+  } catch (error) {
+    console.error('Error fetching visits:', error);
+    res.status(500).json({ error: 'Failed to fetch visits' });
+  }
+});
+
+// Get visits for a patient
+router.get('/visits/patient/:patientId', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    
+    const visits = await Visit.findAll({
+      where: { patient_id: patientId },
+      order: [['created_at', 'DESC']]
+    });
+    
+    res.json(visits);
+  } catch (error) {
+    console.error('Error fetching patient visits:', error);
+    res.status(500).json({ error: 'Failed to fetch patient visits' });
+  }
+});
+
 module.exports = router;

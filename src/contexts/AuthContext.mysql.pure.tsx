@@ -37,7 +37,7 @@ class AuthApiClient {
     return this.getBaseUrl();
   }
 
-  async login(email: string, password: string): Promise<{ token: string; user: any }> {
+  async login(email: string, password: string): Promise<{ token: string; user: User }> {
     const response = await fetch(`${this.baseUrl}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -57,7 +57,7 @@ class AuthApiClient {
     return await response.json();
   }
 
-  async verifyToken(token: string): Promise<{ user: any }> {
+  async verifyToken(token: string): Promise<{ user: User }> {
     const response = await fetch(`${this.baseUrl}/verify`, {
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -101,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: userData.email,
             displayName: userData.displayName,
             role: userData.role,
-            clinic: userData.clinicId?.toString() || '1', // Default to clinic '1' if not set
+            clinic: userData.clinic?.toString() || '1', // Default to clinic '1' if not set
           });
         }
       } catch (error) {
@@ -131,11 +131,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: userData.email,
         displayName: userData.displayName,
         role: userData.role,
-        clinic: userData.clinicId?.toString() || '1', // Default to clinic '1' if not set
+        clinic: userData.clinic?.toString() || '1', // Default to clinic '1' if not set
       });
 
       // Don't call toast here to avoid render warnings
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Sign-in error:', error);
       throw error;
     } finally {
