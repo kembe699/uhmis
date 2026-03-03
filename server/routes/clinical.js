@@ -162,12 +162,13 @@ router.post('/visits', async (req, res) => {
       }
     }
     
-    // Add lab tests to existing patient bill if lab requests exist
+    // Add lab tests to existing patient bill and create lab requests if lab requests exist
     if (visitData.lab_requests && visitData.lab_requests.length > 0) {
       try {
         await addLabTestsToExistingBill(visitData);
+        await createLabRequestsFromVisit(visitData, visit);
       } catch (billError) {
-        console.error('Error adding lab tests to bill:', billError);
+        console.error('Error adding lab tests to bill or creating lab requests:', billError);
         // Don't fail visit creation if bill update fails
       }
     }
@@ -614,5 +615,74 @@ router.delete('/services/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete service' });
   }
 });
+
+// Function to create lab requests from visit data
+async function createLabRequestsFromVisit(visitData, visit) {
+  try {
+    const { v4: uuidv4 } = require('uuid');
+    
+    console.log('Creating lab requests from visit data:', visitData.lab_requests);
+    
+    // Parse lab requests if it's a string
+    let labTests = visitData.lab_requests;
+    if (typeof labTests === 'string') {
+      labTests = JSON.parse(labTests);
+    }
+    
+    if (!Array.isArray(labTests) || labTests.length === 0) {
+      console.log('No lab tests to create requests for');
+      return;
+    }
+    
+    for (const testName of labTests) {
+      try {
+        const requestId = uuidv4();
+        
+        // Create lab request directly in database
+        const insertQuery = `
+          INSERT INTO lab_requests (
+            id, patient_id, patient_name, clinic_id, test_id, test_name, 
+            test_code, requested_by, priority, notes, visit_id, status, requested_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+        `;
+        
+        const replacements = [
+          requestId,
+          visitData.patient_id,
+          visitData.patient_name || 'Unknown Patient',
+          visitData.clinic_id,
+          null, // test_id - will be null for now
+          testName,
+          testName.substring(0, 3).toUpperCase(), // test_code
+          visitData.doctor_name || 'Clinical Staff',
+          'normal', // priority
+          'Lab test requested during clinical visit',
+          visit.id // visit_id
+        ];
+        
+        console.log('Creating lab request with data:', {
+          requestId,
+          patient_id: visitData.patient_id,
+          patient_name: visitData.patient_name,
+          test_name: testName,
+          visit_id: visit.id
+        });
+        
+        await sequelize.query(insertQuery, { replacements });
+        console.log(`Lab request created successfully for test: ${testName}`);
+        
+      } catch (testError) {
+        console.error(`Error creating lab request for ${testName}:`, testError);
+        // Continue with other tests even if one fails
+      }
+    }
+    
+    console.log('Finished creating lab requests from visit');
+    
+  } catch (error) {
+    console.error('Error in createLabRequestsFromVisit:', error);
+    throw error;
+  }
+}
 
 module.exports = router;

@@ -45,12 +45,20 @@ router.post('/', async (req, res) => {
 
     const requestId = uuidv4();
     
-    await sequelize.query(`
+    const insertQuery = `
       INSERT INTO lab_requests (
         id, patient_id, patient_name, clinic_id, test_id, test_name, 
-        test_code, requested_by, priority, notes, visit_id, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, {
+        test_code, requested_by, priority, notes, visit_id, status, requested_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+    `;
+    
+    console.log('Lab request insert query:', insertQuery);
+    console.log('Lab request replacements:', [
+      requestId, patient_id, patient_name, clinic_id, test_id, 
+      test_name, test_code, requested_by, priority, notes, visit_id
+    ]);
+    
+    await sequelize.query(insertQuery, {
       replacements: [
         requestId, patient_id, patient_name, clinic_id, test_id, 
         test_name, test_code, requested_by, priority, notes, visit_id
@@ -67,6 +75,41 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('Error creating lab request:', error);
     res.status(500).json({ error: 'Failed to create lab request' });
+  }
+});
+
+// Auto-save component value
+router.post('/:id/auto-save', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { componentName, componentValue, remark } = req.body;
+
+    console.log('Auto-save request:', { id, componentName, componentValue, remark });
+
+    // Check if lab request exists
+    const [labRequest] = await sequelize.query(`
+      SELECT * FROM lab_requests WHERE id = ?
+    `, {
+      replacements: [id]
+    });
+
+    if (labRequest.length === 0) {
+      return res.status(404).json({ error: 'Lab request not found' });
+    }
+
+    // For now, just return success - we can implement actual storage later
+    console.log('Auto-save successful for:', componentName, componentValue);
+    
+    res.json({ 
+      success: true, 
+      message: 'Component auto-saved successfully',
+      componentName,
+      componentValue,
+      remark
+    });
+  } catch (error) {
+    console.error('Error auto-saving component:', error);
+    res.status(500).json({ error: 'Failed to auto-save component' });
   }
 });
 

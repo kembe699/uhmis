@@ -57,10 +57,16 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
     
+    // First ensure tables exist
+    await LabTest.sync();
+    await LabTestComponent.sync();
+    
+    const { Op } = require('sequelize');
+    
     const labTests = await LabTest.findAll({
       where: {
         test_name: {
-          [require('sequelize').Op.like]: `%${q}%`
+          [Op.like]: `%${q}%`
         },
         is_active: true
       },
@@ -73,10 +79,33 @@ router.get('/search', async (req, res) => {
       order: [['test_name', 'ASC']],
     });
     
+    console.log(`Search for "${q}" found ${labTests.length} lab tests`);
     res.json(labTests);
   } catch (error) {
     console.error('Error searching lab tests:', error);
-    res.status(500).json({ error: 'Failed to search lab tests' });
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Fallback to raw SQL
+    try {
+      const [results] = await sequelize.query(`
+        SELECT * FROM lab_tests 
+        WHERE test_name LIKE ? AND is_active = 1
+        ORDER BY test_name ASC
+      `, {
+        replacements: [`%${q}%`]
+      });
+      
+      console.log(`Fallback search found ${results.length} lab tests`);
+      res.json(results);
+    } catch (fallbackError) {
+      console.error('Fallback search also failed:', fallbackError);
+      res.status(500).json({ 
+        error: 'Failed to search lab tests', 
+        details: error.message,
+        fallbackError: fallbackError.message 
+      });
+    }
   }
 });
 
@@ -242,7 +271,7 @@ router.post('/with-components', async (req, res) => {
     const testData = {
       ...test,
       is_active: true,
-      created_by: test.created_by || 'System'
+      created_by: null // Remove foreign key constraint by setting to null
     };
     
     // Check if test_code already exists

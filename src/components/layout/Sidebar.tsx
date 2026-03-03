@@ -24,7 +24,8 @@ import {
   Clock,
   ShoppingCart,
   Building2,
-  Package
+  Package,
+  Hospital
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserRole } from '@/types';
@@ -110,6 +111,7 @@ const setupDropdown: NavDropdown = {
     { label: 'Lab Tests', href: '/setup/lab-tests', icon: TestTube, roles: ['admin'] },
     { label: 'Services', href: '/setup/services', icon: Wrench, roles: ['admin'] },
     { label: 'Clinics', href: '/setup/clinics', icon: Stethoscope, roles: ['admin'] },
+    { label: 'Facility', href: '/setup/facility', icon: Hospital, roles: ['admin'] },
     { label: 'Mindray Integration', href: '/setup/mindray-integration', icon: FlaskConical, roles: ['admin'] },
     { label: 'Security', href: '/setup/security', icon: Shield, roles: ['admin'] },
   ]

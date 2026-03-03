@@ -43,6 +43,7 @@ const cashTransfersRouter = require('./routes/cash-transfers');
 const suppliersRouter = require('./routes/suppliers');
 const purchaseOrdersRouter = require('./routes/purchase-orders');
 const dailyExpensesRouter = require('./routes/daily-expenses');
+const facilitiesRouter = require('./routes/facilities');
 
 // API routes
 app.get('/api/status', (req, res) => {
@@ -79,6 +80,7 @@ app.use('/api/cash-transfers', cashTransfersRouter);
 app.use('/api/suppliers', suppliersRouter);
 app.use('/api/purchase-orders', purchaseOrdersRouter);
 app.use('/api/daily-expenses', dailyExpensesRouter);
+app.use('/api/facilities', facilitiesRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

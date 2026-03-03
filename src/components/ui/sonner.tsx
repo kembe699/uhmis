@@ -11,7 +11,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
 
   // Prevent hydration mismatch by only rendering after mount
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   // Don't render anything on the server or until mounted

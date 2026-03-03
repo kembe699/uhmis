@@ -785,7 +785,7 @@ const Reports: React.FC = () => {
                         <tr key={med.medication}>
                           <td className="font-medium">{med.medication}</td>
                           <td>{med.count}</td>
-                          <td>{med.percentage.toFixed(1)}%</td>
+                          <td>{med.percentage ? med.percentage.toFixed(1) : '0.0'}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -814,7 +814,7 @@ const Reports: React.FC = () => {
                             <td className="font-medium">{med.medication}</td>
                             <td>
                               <span className="text-green-600 font-medium">
-                                {med.avgPerDay.toFixed(1)}
+                                {med.avgPerDay ? med.avgPerDay.toFixed(1) : '0.0'}
                               </span>
                             </td>
                           </tr>
@@ -850,7 +850,7 @@ const Reports: React.FC = () => {
                             <td className="font-medium">{med.medication}</td>
                             <td>
                               <span className="text-red-600 font-medium">
-                                {med.avgPerDay.toFixed(2)}
+                                {med.avgPerDay ? med.avgPerDay.toFixed(2) : '0.00'}
                               </span>
                             </td>
                           </tr>

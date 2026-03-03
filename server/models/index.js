@@ -264,6 +264,7 @@ const SupplierModel = require('./Supplier');
 const PurchaseOrderModel = require('./PurchaseOrder');
 const PurchaseOrderItemModel = require('./PurchaseOrderItem');
 const DailyExpenseModel = require('./DailyExpense');
+const Facility = require('./Facility')(sequelize);
 
 // Initialize DrClinic model
 const DrClinic = DrClinicModel(sequelize);
@@ -380,7 +381,37 @@ const initializeDatabase = async () => {
           console.log('Added created_by column to lab_tests table');
         }
         
-        if (columnNames.includes('price') && columnNames.includes('service_id') && columnNames.includes('created_by')) {
+        if (!columnNames.includes('created_at')) {
+          await sequelize.query("ALTER TABLE lab_tests ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+          console.log('Added created_at column to lab_tests table');
+        }
+        
+        if (!columnNames.includes('updated_at')) {
+          await sequelize.query("ALTER TABLE lab_tests ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+          console.log('Added updated_at column to lab_tests table');
+        }
+        
+        // Remove foreign key constraint on created_by if it exists
+        try {
+          const [constraints] = await sequelize.query(`
+            SELECT CONSTRAINT_NAME 
+            FROM information_schema.KEY_COLUMN_USAGE 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'lab_tests' 
+            AND COLUMN_NAME = 'created_by'
+            AND REFERENCED_TABLE_NAME IS NOT NULL
+          `);
+          
+          if (constraints.length > 0) {
+            const constraintName = constraints[0].CONSTRAINT_NAME;
+            await sequelize.query(`ALTER TABLE lab_tests DROP FOREIGN KEY ${constraintName}`);
+            console.log(`Removed foreign key constraint ${constraintName} from lab_tests.created_by`);
+          }
+        } catch (fkError) {
+          console.log('Note: Could not check/remove foreign key constraint on created_by:', fkError.message);
+        }
+        
+        if (columnNames.includes('price') && columnNames.includes('service_id') && columnNames.includes('created_by') && columnNames.includes('created_at') && columnNames.includes('updated_at')) {
           console.log('lab_tests table already has all required columns');
         }
       }
@@ -405,8 +436,8 @@ const initializeDatabase = async () => {
           unit VARCHAR(50),
           reference_range VARCHAR(255),
           sort_order INT DEFAULT 0,
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_lab_test_id (lab_test_id)
         )
       `);
@@ -796,11 +827,11 @@ const initializeDatabase = async () => {
         CREATE TABLE IF NOT EXISTS lab_requests (
           id VARCHAR(36) PRIMARY KEY,
           patient_id VARCHAR(255) NOT NULL,
-          patient_name VARCHAR(255) NOT NULL,
+          patient_name VARCHAR(255),
           clinic_id INT NOT NULL,
-          test_id VARCHAR(36) NOT NULL,
+          test_id VARCHAR(36),
           test_name VARCHAR(255) NOT NULL,
-          test_code VARCHAR(50) NOT NULL,
+          test_code VARCHAR(50),
           requested_by VARCHAR(255) NOT NULL,
           requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           priority ENUM('normal', 'urgent', 'stat') DEFAULT 'normal',
@@ -857,6 +888,43 @@ const initializeDatabase = async () => {
       
     } catch (error) {
       console.log('Note: Could not ensure lab_results table:', error.message);
+    }
+
+    // Ensure facilities table exists
+    try {
+      const [tables] = await sequelize.query("SHOW TABLES LIKE 'facilities'");
+      
+      if (tables.length === 0) {
+        console.log('Creating facilities table...');
+        await sequelize.query(`
+          CREATE TABLE facilities (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            type VARCHAR(100) NOT NULL DEFAULT 'Hospital',
+            address TEXT NOT NULL,
+            city VARCHAR(100),
+            state VARCHAR(100),
+            postal_code VARCHAR(20),
+            country VARCHAR(100) NOT NULL DEFAULT 'South Sudan',
+            phone VARCHAR(50) NOT NULL,
+            fax VARCHAR(50),
+            email VARCHAR(255) NOT NULL,
+            website VARCHAR(255),
+            license_number VARCHAR(100),
+            established_date DATE,
+            bed_capacity INT,
+            description TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+        console.log('Created facilities table successfully');
+      } else {
+        console.log('facilities table already exists');
+      }
+    } catch (error) {
+      console.log('Note: Could not ensure facilities table:', error.message);
     }
 
     console.log('Database models synchronized.');
@@ -968,5 +1036,6 @@ module.exports = {
   PurchaseOrder,
   PurchaseOrderItem,
   DailyExpense,
+  Facility,
   initializeDatabase
 };

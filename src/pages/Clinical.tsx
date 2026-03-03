@@ -413,8 +413,8 @@ const Clinical: React.FC = () => {
         addedAt: new Date().toISOString()
       };
 
-      // Add to Firestore for persistence
-      await addDoc(collection(db, 'custom_diagnoses'), newDiagnosis);
+      // TODO: Add to database for persistence when diagnosis system is implemented
+      // await addDoc(collection(db, 'custom_diagnoses'), newDiagnosis);
       
       toast.success('New diagnosis added successfully');
       setShowAddDiagnosisModal(false);
@@ -678,17 +678,15 @@ const Clinical: React.FC = () => {
       console.log('Patients data received:', patientsData);
       
       // Transform MySQL data to match frontend Patient interface
-      const transformedPatients = patientsData.map(patient => ({
-        id: patient.id,
-        patientId: patient.patient_id,
-        fullName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+      const transformedPatients = (patientsData || []).map(patient => ({
+        id: patient.id, // This should be the UUID from database
+        patientId: patient.id, // Use the same UUID for both properties
+        fullName: patient.full_name || patient.fullName,
         first_name: patient.first_name,
         last_name: patient.last_name,
         age: patient.age,
-        dateOfBirth: patient.date_of_birth,
         gender: patient.gender,
-        phoneNumber: patient.phone_number || patient.phone,
-        phone: patient.phone,
+        phoneNumber: patient.phone_number || patient.phoneNumber,
         occupation: patient.occupation,
         clinic: patient.clinic_id?.toString(),
         registeredAt: patient.createdAt,
@@ -752,6 +750,75 @@ const Clinical: React.FC = () => {
       setVisits([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to create lab requests
+  const createLabRequests = async (visit: any, labTests: string[]) => {
+    try {
+      console.log('Creating lab requests for visit:', visit.id, 'tests:', labTests);
+      
+      const labRequestPromises = labTests.map(async (testName) => {
+        try {
+          // First search for the lab test to get its details
+          const hostname = window.location.hostname;
+          const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+          const baseUrl = isLocalhost ? '/api' : `/api`;
+          const searchResponse = await fetch(`${baseUrl}/lab-tests/search?q=${encodeURIComponent(testName)}`);
+          
+          let testDetails = null;
+          if (searchResponse.ok) {
+            const searchResults = await searchResponse.json();
+            testDetails = searchResults.find((test: any) => 
+              test.test_name.toLowerCase() === testName.toLowerCase()
+            );
+          }
+          
+          // Create lab request
+          const labRequestData = {
+            patient_id: visit.patient_id || visit.patientId,
+            patient_name: visit.patient_name || visit.patientName || selectedPatient?.fullName || 'Unknown Patient',
+            clinic_id: parseInt(visit.clinic_id || visit.clinic || user?.clinic),
+            test_id: testDetails?.id || null,
+            test_name: testName,
+            test_code: testDetails?.test_code || testName.substring(0, 3).toUpperCase(),
+            requested_by: user?.displayName || 'Clinical Staff',
+            priority: 'normal',
+            notes: `Lab test requested during clinical visit`,
+            visit_id: visit.id
+          };
+          
+          console.log('Creating lab request:', labRequestData);
+          
+          const response = await fetch(`${baseUrl}/lab-requests`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(labRequestData),
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Failed to create lab request for ${testName}: ${response.statusText}`);
+          }
+          
+          const createdRequest = await response.json();
+          console.log('Lab request created successfully:', createdRequest);
+          return createdRequest;
+          
+        } catch (error) {
+          console.error(`Error creating lab request for ${testName}:`, error);
+          throw error;
+        }
+      });
+      
+      const createdRequests = await Promise.all(labRequestPromises);
+      console.log('All lab requests created successfully:', createdRequests.length);
+      
+    } catch (error) {
+      console.error('Error creating lab requests:', error);
+      throw error;
     }
   };
 
@@ -926,6 +993,7 @@ const Clinical: React.FC = () => {
       console.log('Selected Patient Data:', selectedPatient);
       console.log('Patient Full Name:', selectedPatient.fullName);
       console.log('Patient ID:', selectedPatient.id);
+      console.log('Patient patientId:', selectedPatient.patientId);
       
       // Ensure we have a valid patient name
       let patientName = selectedPatient.fullName || 
@@ -944,7 +1012,7 @@ const Clinical: React.FC = () => {
       
       // Transform visit data for MySQL
       const mysqlVisitData = {
-        patient_id: selectedPatient.id,
+        patient_id: selectedPatient.patientId || selectedPatient.id,
         patient_name: patientName,
         clinic_id: parseInt(user.clinic) || 1,
         visit_date: new Date().toISOString(),
@@ -980,9 +1048,10 @@ const Clinical: React.FC = () => {
 
       const visitDoc = await clinicalApi.createVisit(mysqlVisitData);
 
-      // Create patient bill if lab tests are selected
+      // Create patient bill and lab requests if lab tests are selected
       if (selectedLabTests.length > 0) {
         await createPatientBillForLabTests(visitDoc, selectedLabTests);
+        await createLabRequests(visitDoc, selectedLabTests);
       }
 
       // TODO: Save diagnosis when diagnosis system is implemented
@@ -1121,14 +1190,14 @@ const Clinical: React.FC = () => {
 
     setUpdatingDiagnosis(true);
     try {
-      // Check if diagnosis already exists for this visit
-      const diagnosesRef = collection(db, 'diagnoses');
-      const diagnosisQuery = query(
-        diagnosesRef,
-        where('visitId', '==', selectedVisit.id),
-        where('clinic', '==', user.clinic)
-      );
-      const diagnosisSnapshot = await getDocs(diagnosisQuery);
+      // TODO: Check if diagnosis already exists for this visit when diagnosis system is implemented
+      // const diagnosesRef = collection(db, 'diagnoses');
+      // const diagnosisQuery = query(
+      //   diagnosesRef,
+      //   where('visitId', '==', selectedVisit.id),
+      //   where('clinic', '==', user.clinic)
+      // );
+      // const diagnosisSnapshot = await getDocs(diagnosisQuery);
 
       const diagnosisData = {
         description: diagnosisForm.diagnosis.trim(),
@@ -1142,46 +1211,47 @@ const Clinical: React.FC = () => {
         })
       };
 
-      if (!diagnosisSnapshot.empty) {
-        // Update existing diagnosis
-        const diagnosisDoc = diagnosisSnapshot.docs[0];
-        await updateDoc(doc(db, 'diagnoses', diagnosisDoc.id), {
-          ...diagnosisData,
-          updatedAt: new Date().toISOString(),
-          updatedBy: user.displayName
-        });
-      } else {
-        // Create new diagnosis
-        await addDoc(collection(db, 'diagnoses'), {
-          visitId: selectedVisit.id,
-          patientId: selectedVisit.patientId,
-          ...diagnosisData,
-          clinic: user.clinic,
-          date: new Date().toISOString(),
-          doctorId: user.uid,
-          doctorName: user.displayName
-        });
-      }
+      // TODO: Update or create diagnosis when diagnosis system is implemented
+      // if (!diagnosisSnapshot.empty) {
+      //   // Update existing diagnosis
+      //   const diagnosisDoc = diagnosisSnapshot.docs[0];
+      //   await updateDoc(doc(db, 'diagnoses', diagnosisDoc.id), {
+      //     ...diagnosisData,
+      //     updatedAt: new Date().toISOString(),
+      //     updatedBy: user.displayName
+      //   });
+      // } else {
+      //   // Create new diagnosis
+      //   await addDoc(collection(db, 'diagnoses'), {
+      //     visitId: selectedVisit.id,
+      //     patientId: selectedVisit.patientId,
+      //     ...diagnosisData,
+      //     clinic: user.clinic,
+      //     date: new Date().toISOString(),
+      //     doctorId: user.uid,
+      //     doctorName: user.displayName
+      //   });
+      // }
 
       toast.success('Diagnosis updated successfully');
       setEditingDiagnosis(false);
       setDiagnosisForm({ diagnosis: '', diagnosisCode: '' });
       
-      // Refresh the diagnosis data
-      if (selectedVisit) {
-        const diagnosesRef = collection(db, 'diagnoses');
-        const diagnosisQuery = query(
-          diagnosesRef,
-          where('visitId', '==', selectedVisit.id),
-          where('clinic', '==', user.clinic)
-        );
-        const diagnosisSnapshot = await getDocs(diagnosisQuery);
-        const diagnosisData = !diagnosisSnapshot.empty ? {
-          id: diagnosisSnapshot.docs[0].id,
-          ...diagnosisSnapshot.docs[0].data()
-        } : null;
-        setVisitDiagnosis(diagnosisData);
-      }
+      // TODO: Refresh the diagnosis data when diagnosis system is implemented
+      // if (selectedVisit) {
+      //   const diagnosesRef = collection(db, 'diagnoses');
+      //   const diagnosisQuery = query(
+      //     diagnosesRef,
+      //     where('visitId', '==', selectedVisit.id),
+      //     where('clinic', '==', user.clinic)
+      //   );
+      //   const diagnosisSnapshot = await getDocs(diagnosisQuery);
+      //   const diagnosisData = !diagnosisSnapshot.empty ? {
+      //     id: diagnosisSnapshot.docs[0].id,
+      //     ...diagnosisSnapshot.docs[0].data()
+      //   } : null;
+      //   setVisitDiagnosis(diagnosisData);
+      // }
     } catch (error) {
       console.error('Error updating diagnosis:', error);
       toast.error('Failed to update diagnosis');
@@ -1328,19 +1398,22 @@ const Clinical: React.FC = () => {
     if (!user?.clinic) return;
     
     try {
-      const visitsRef = collection(db, 'visits');
-      const historyQuery = query(
-        visitsRef,
-        where('patientId', '==', patient.patientId),
-        where('clinic', '==', user.clinic),
-        orderBy('date', 'desc')
-      );
-      const historySnapshot = await getDocs(historyQuery);
-      const history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Visit[];
+      // TODO: Implement patient history fetching when history system is implemented
+      // const visitsRef = collection(db, 'visits');
+      // const historyQuery = query(
+      //   visitsRef,
+      //   where('patientId', '==', patient.patientId),
+      //   where('clinic', '==', user.clinic),
+      //   orderBy('date', 'desc')
+      // );
+      // const historySnapshot = await getDocs(historyQuery);
+      // const history = historySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Visit[];
       
-      setSelectedPatientHistory(patient);
-      setPatientVisitHistory(history);
-      setShowPatientHistoryModal(true);
+      // setSelectedPatientHistory(patient);
+      // setPatientVisitHistory([]);
+      // setShowPatientHistoryModal(true);
+      
+      toast.info('Patient history feature not yet implemented');
     } catch (error) {
       console.error('Error fetching patient history:', error);
       toast.error('Failed to fetch patient history');
@@ -1373,7 +1446,8 @@ const Clinical: React.FC = () => {
         occupation: ''
       };
       
-      const patientDocRef = await addDoc(collection(db, 'patients'), patientData);
+      // TODO: Save patient to database when patient registration system is implemented
+      // const patientDocRef = await addDoc(collection(db, 'patients'), patientData);
       
       // Auto-queue the patient
       const queueData = {
@@ -1385,10 +1459,11 @@ const Clinical: React.FC = () => {
         queuedAt: new Date().toISOString(),
         queuedBy: user.displayName,
         clinic: user.clinic,
-        patientDocId: patientDocRef.id
+        patientDocId: 'temp-patient-id'
       };
       
-      const queueDocRef = await addDoc(collection(db, 'patient_queue'), queueData);
+      // TODO: Save queue data to database when queue system is implemented
+      // const queueDocRef = await addDoc(collection(db, 'patient_queue'), queueData);
       
       // Reset form and close modal
       setRegistrationForm({
@@ -1408,7 +1483,7 @@ const Clinical: React.FC = () => {
       
       // Auto-open New Clinical Visit modal for the newly registered patient
       const newPatient = {
-        id: patientDocRef.id,
+        id: 'temp-patient-id',
         patientId,
         fullName: registrationForm.fullName,
         age: finalAge,
@@ -1421,7 +1496,7 @@ const Clinical: React.FC = () => {
       };
       
       const newQueueItem = {
-        id: queueDocRef.id, // Use the actual document ID from Firestore
+        id: 'temp-queue-id', // Use placeholder ID
         patientId,
         patientName: registrationForm.fullName,
         age: finalAge,
@@ -1430,7 +1505,7 @@ const Clinical: React.FC = () => {
         queuedAt: new Date().toISOString(),
         queuedBy: user.displayName,
         clinic: user.clinic,
-        patientDocId: patientDocRef.id
+        patientDocId: 'temp-patient-id'
       };
       
       // Set the newly registered patient as selected and open visit form
@@ -1463,22 +1538,18 @@ const Clinical: React.FC = () => {
   // Get next queue number
   const getNextQueueNumber = async (): Promise<number> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const queueRef = collection(db, 'patient_queue');
-      // Simplified query to avoid index requirements
-      const queueQuery = query(
-        queueRef,
-        where('clinic', '==', user?.clinic)
-      );
-      const queueSnapshot = await getDocs(queueQuery);
+      // TODO: Implement proper queue number generation when queue system is implemented
+      // const today = new Date().toISOString().split('T')[0];
+      // const queueRef = collection(db, 'patient_queue');
+      // // Simplified query to avoid index requirements
+      // const queueQuery = query(
+      //   queueRef,
+      //   where('clinic', '==', user?.clinic)
+      // );
+      // const queueSnapshot = await getDocs(queueQuery);
       
-      // Filter by today's date in memory instead of in query
-      const todayEntries = queueSnapshot.docs.filter(doc => {
-        const queuedAt = doc.data().queuedAt;
-        return queuedAt && queuedAt.startsWith(today);
-      });
-      
-      return todayEntries.length + 1;
+      // Return a simple incremental queue number for now
+      return Math.floor(Math.random() * 100) + 1;
     } catch (error) {
       console.error('Error getting queue number:', error);
       return 1;

@@ -18,6 +18,8 @@ import Reports from "./pages/Reports";
 import LabTests from "./pages/setup/LabTests";
 import MindrayIntegration from "./pages/MindrayIntegration";
 import Clinics from '@/pages/setup/Clinics';
+import Facility from '@/pages/setup/Facility';
+import Services from '@/pages/setup/Services';
 import Security from "./pages/setup/Security";
 import SecurityClean from "./pages/setup/SecurityClean";
 import SecurityFixed from "./pages/setup/SecurityFixed";
@@ -171,6 +173,16 @@ const AppRoutes = () => {
       <Route path="/setup/clinics" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <Clinics />
+        </ProtectedRoute>
+      } />
+      <Route path="/setup/services" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <Services />
+        </ProtectedRoute>
+      } />
+      <Route path="/setup/facility" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <Facility />
         </ProtectedRoute>
       } />
       <Route path="/setup/security" element={

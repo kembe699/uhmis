@@ -81,6 +81,14 @@ router.post('/', async (req, res) => {
     const bill = await PatientBill.create(billData);
     console.log('Patient bill created successfully:', bill.id);
     
+    // Create lab requests if bill contains lab tests
+    try {
+      await createLabRequestsFromBill(billData, bill);
+    } catch (labError) {
+      console.error('Error creating lab requests from bill:', labError);
+      // Don't fail bill creation if lab request creation fails
+    }
+    
     res.json(bill);
   } catch (error) {
     console.error('Error creating patient bill:', error);
@@ -567,5 +575,101 @@ router.get('/search/:clinicId', async (req, res) => {
     res.status(500).json({ error: 'Failed to search patient bills' });
   }
 });
+
+// Function to create lab requests from bill data
+async function createLabRequestsFromBill(billData, bill) {
+  try {
+    const { v4: uuidv4 } = require('uuid');
+    const { sequelize } = require('../models');
+    
+    console.log('Checking bill for lab tests to create requests...');
+    
+    // Parse services from bill
+    let services = [];
+    if (billData.services) {
+      if (typeof billData.services === 'string') {
+        services = JSON.parse(billData.services);
+      } else {
+        services = billData.services;
+      }
+    }
+    
+    if (!Array.isArray(services) || services.length === 0) {
+      console.log('No services found in bill');
+      return;
+    }
+    
+    // Filter for lab tests (services that contain common lab test keywords)
+    const labTestKeywords = [
+      'test', 'lab', 'blood', 'urine', 'stool', 'culture', 'screening', 
+      'analysis', 'examination', 'assay', 'panel', 'profile', 'count',
+      'malaria', 'hiv', 'hepatitis', 'glucose', 'cholesterol', 'creatinine',
+      'hemoglobin', 'wbc', 'rbc', 'platelet', 'esr', 'bilirubin'
+    ];
+    
+    const labServices = services.filter(service => {
+      const serviceName = (service.serviceName || service.name || service.service_name || '').toLowerCase();
+      return labTestKeywords.some(keyword => serviceName.includes(keyword));
+    });
+    
+    if (labServices.length === 0) {
+      console.log('No lab tests found in bill services');
+      return;
+    }
+    
+    console.log(`Found ${labServices.length} lab test(s) in bill:`, labServices.map(s => s.serviceName || s.name));
+    
+    // Create lab requests for each lab test
+    for (const labService of labServices) {
+      try {
+        const requestId = uuidv4();
+        const testName = labService.serviceName || labService.name || labService.service_name;
+        
+        // Create lab request directly in database
+        const insertQuery = `
+          INSERT INTO lab_requests (
+            id, patient_id, patient_name, clinic_id, test_id, test_name, 
+            test_code, requested_by, priority, notes, visit_id, status, requested_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+        `;
+        
+        const replacements = [
+          requestId,
+          billData.patient_id,
+          billData.patient_name || 'Unknown Patient',
+          billData.clinic_id,
+          null, // test_id - will be null for now
+          testName,
+          testName.substring(0, 3).toUpperCase(), // test_code
+          billData.created_by || 'Billing Staff',
+          'normal', // priority
+          `Lab test requested from patient bill: ${bill.bill_number}`,
+          null // visit_id - null since this is from billing
+        ];
+        
+        console.log('Creating lab request from bill:', {
+          requestId,
+          patient_id: billData.patient_id,
+          patient_name: billData.patient_name,
+          test_name: testName,
+          bill_number: bill.bill_number
+        });
+        
+        await sequelize.query(insertQuery, { replacements });
+        console.log(`Lab request created successfully for test: ${testName}`);
+        
+      } catch (testError) {
+        console.error(`Error creating lab request for ${labService.serviceName}:`, testError);
+        // Continue with other tests even if one fails
+      }
+    }
+    
+    console.log('Finished creating lab requests from bill');
+    
+  } catch (error) {
+    console.error('Error in createLabRequestsFromBill:', error);
+    // Don't throw error to avoid failing bill creation
+  }
+}
 
 module.exports = router;
