@@ -204,6 +204,7 @@ const Laboratory: React.FC = () => {
       
       const requests = await response.json() as LabRequest[];
       console.log('Lab requests received:', requests);
+      console.log('First request data:', requests[0]);
       
       setLabRequests(requests || []);
       console.log('Successfully loaded', (requests || []).length, 'lab requests');
@@ -234,6 +235,89 @@ const Laboratory: React.FC = () => {
     }
   };
 
+  const loadTestComponents = async (testName: string) => {
+    try {
+      console.log('Loading components for test:', testName);
+      
+      // First try to fetch components from database
+      const response = await fetch(`/api/lab-tests/code/${encodeURIComponent(testName)}`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const labTest = await response.json();
+        console.log('Fetched lab test with components:', labTest);
+        
+        if (labTest.components && labTest.components.length > 0) {
+          const dbComponents = labTest.components.map((comp: any) => ({
+            name: comp.component_name || comp.name,
+            value: '',
+            unit: comp.unit || '',
+            normalRangeMin: '',
+            normalRangeMax: '',
+            normalRangeText: comp.reference_range || comp.normalRangeText || '',
+            remark: ''
+          }));
+          
+          console.log('Setting database components:', dbComponents);
+          setTestComponents(dbComponents);
+          return;
+        }
+      }
+      
+      // Fallback to hardcoded components if not found in database
+      const testComponentsMap: { [key: string]: Array<{
+        name: string;
+        value: string;
+        unit: string;
+        normalRangeMin: string;
+        normalRangeMax: string;
+        normalRangeText: string;
+        remark: string;
+      }> } = {
+        'ICT for Malaria': [
+          { name: 'P. falciparum', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: 'Negative', remark: '' },
+          { name: 'P. vivax', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: 'Negative', remark: '' }
+        ],
+        'Full Blood Count': [
+          { name: 'Hemoglobin', value: '', unit: 'g/dL', normalRangeMin: '12.0', normalRangeMax: '16.0', normalRangeText: '12.0-16.0 g/dL', remark: '' },
+          { name: 'White Blood Cells', value: '', unit: '×10³/μL', normalRangeMin: '4.0', normalRangeMax: '11.0', normalRangeText: '4.0-11.0 ×10³/μL', remark: '' },
+          { name: 'Platelets', value: '', unit: '×10³/μL', normalRangeMin: '150', normalRangeMax: '450', normalRangeText: '150-450 ×10³/μL', remark: '' }
+        ],
+        'CBC': [
+          { name: 'Hemoglobin', value: '', unit: 'g/dL', normalRangeMin: '12.0', normalRangeMax: '16.0', normalRangeText: '12.0-16.0 g/dL', remark: '' },
+          { name: 'White Blood Cells', value: '', unit: '×10³/μL', normalRangeMin: '4.0', normalRangeMax: '11.0', normalRangeText: '4.0-11.0 ×10³/μL', remark: '' },
+          { name: 'Red Blood Cells', value: '', unit: '×10⁶/μL', normalRangeMin: '4.5', normalRangeMax: '5.5', normalRangeText: '4.5-5.5 ×10⁶/μL', remark: '' },
+          { name: 'Platelets', value: '', unit: '×10³/μL', normalRangeMin: '150', normalRangeMax: '450', normalRangeText: '150-450 ×10³/μL', remark: '' },
+          { name: 'Hematocrit', value: '', unit: '%', normalRangeMin: '36', normalRangeMax: '46', normalRangeText: '36-46%', remark: '' }
+        ],
+        'RFT': [
+          { name: 'Urea', value: '', unit: 'mmol/L', normalRangeMin: '2.5', normalRangeMax: '7.5', normalRangeText: '2.5-7.5 mmol/L', remark: '' },
+          { name: 'Creatinine', value: '', unit: 'μmol/L', normalRangeMin: '60', normalRangeMax: '120', normalRangeText: '60-120 μmol/L', remark: '' },
+          { name: 'Sodium', value: '', unit: 'mmol/L', normalRangeMin: '135', normalRangeMax: '145', normalRangeText: '135-145 mmol/L', remark: '' },
+          { name: 'Potassium', value: '', unit: 'mmol/L', normalRangeMin: '3.5', normalRangeMax: '5.0', normalRangeText: '3.5-5.0 mmol/L', remark: '' },
+          { name: 'Chloride', value: '', unit: 'mmol/L', normalRangeMin: '95', normalRangeMax: '105', normalRangeText: '95-105 mmol/L', remark: '' }
+        ],
+        'Urinalysis': [
+          { name: 'Protein', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: 'Negative', remark: '' },
+          { name: 'Glucose', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: 'Negative', remark: '' },
+          { name: 'Blood', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: 'Negative', remark: '' }
+        ]
+      };
+      
+      const components = testComponentsMap[testName] || [
+        { name: 'Result', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: '', remark: '' }
+      ];
+      
+      console.log('Setting fallback components:', components);
+      setTestComponents(components);
+      
+    } catch (error) {
+      console.error('Error loading test components:', error);
+      setTestComponents([]);
+    }
+  };
+
   const loadPatients = async () => {
     try {
       const response = await fetch(`/api/patients?clinic=${encodeURIComponent(user!.clinic)}`, {
@@ -256,6 +340,9 @@ const Laboratory: React.FC = () => {
   };
 
   const handlePatientSelect = async (patientId: string, patientName: string) => {
+    console.log('Patient selected:', { patientId, patientName });
+    console.log('Patient from map:', patientMap[patientId]);
+    
     setSelectedPatientName(patientName);
     setSelectedPatient(patientMap[patientId] || null);
     setSelectedPatientId(patientId);
@@ -265,24 +352,40 @@ const Laboratory: React.FC = () => {
     setTestComponents([]);
     setResultText('');
     
-    // Load patient requests
-    try {
-      const response = await fetch(`/api/lab-requests?clinic=${encodeURIComponent(user!.clinic)}&patientId=${patientId}&status=pending,partial`, {
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const requests = await response.json() as LabRequest[];
-        setSelectedPatientRequests(requests);
+    // If patient not in map, fetch from server
+    if (!patientMap[patientId]) {
+      try {
+        const response = await fetch(`/api/patients/${patientId}`, {
+          credentials: 'include'
+        });
         
-        if (requests.length > 0) {
-          const firstRequest = requests[0];
-          setSelectedTestRequest(firstRequest);
-          setTestName(firstRequest.testType);
+        if (response.ok) {
+          const patient = await response.json();
+          console.log('Fetched patient details:', patient);
+          setSelectedPatient(patient);
+          // Update patient map
+          setPatientMap(prev => ({ ...prev, [patientId]: patient }));
         }
+      } catch (error) {
+        console.error('Error fetching patient details:', error);
       }
-    } catch (error) {
-      console.error('Error loading patient requests:', error);
+    }
+    
+    // Load patient requests - filter from existing lab requests for this specific patient
+    const patientRequests = filteredRequests.filter(request => 
+      (request.patient_id || request.patientId) === patientId
+    );
+    
+    console.log('Setting patient requests for patient:', patientId, patientRequests);
+    setSelectedPatientRequests(patientRequests);
+    
+    if (patientRequests.length > 0) {
+      const firstRequest = patientRequests[0];
+      setSelectedTestRequest(firstRequest);
+      setTestName(firstRequest.test_name || firstRequest.testType);
+    } else {
+      setSelectedTestRequest(null);
+      setTestName('');
     }
   };
 
@@ -407,9 +510,9 @@ const Laboratory: React.FC = () => {
 
   const filteredRequests = labRequests.filter(request => {
     if (statusFilter !== 'all' && request.status !== statusFilter) return false;
-    if (dateRangeFrom && request.requestedAt < dateRangeFrom) return false;
-    if (dateRangeTo && request.requestedAt > dateRangeTo) return false;
-    if (patientSearch && !request.patientName.toLowerCase().includes(patientSearch.toLowerCase())) return false;
+    if (dateRangeFrom && request.requested_at < dateRangeFrom) return false;
+    if (dateRangeTo && request.requested_at > dateRangeTo) return false;
+    if (patientSearch && !(request.patient_name || request.patientName || '').toLowerCase().includes(patientSearch.toLowerCase())) return false;
     return true;
   });
 
@@ -455,13 +558,13 @@ const Laboratory: React.FC = () => {
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
-                  <div><span className="font-medium">OPD No:</span> {selectedPatient?.patientId || ''}</div>
-                  <div><span className="font-medium">Surname:</span> {selectedPatient?.fullName?.split(' ')[0] || ''}</div>
-                  <div><span className="font-medium">Othernames:</span> {selectedPatient?.fullName?.split(' ').slice(1).join(' ') || ''}</div>
-                  <div><span className="font-medium">Age:</span> {selectedPatient?.age || ''}</div>
-                  <div><span className="font-medium">Sex:</span> {selectedPatient?.gender || ''}</div>
-                  <div><span className="font-medium">Residence:</span> {selectedPatient?.address?.village || ''}</div>
-                  <div><span className="font-medium">Occupation:</span> {selectedPatient?.occupation || ''}</div>
+                  <div><span className="font-medium">OPD No:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.patient_id || selectedPatient?.patient_id || selectedPatient?.patientId || ''}</div>
+                  <div><span className="font-medium">Surname:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.last_name || selectedPatient?.last_name || selectedPatient?.fullName?.split(' ')[0] || ''}</div>
+                  <div><span className="font-medium">Othernames:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.first_name || selectedPatient?.first_name || selectedPatient?.fullName?.split(' ').slice(1).join(' ') || ''}</div>
+                  <div><span className="font-medium">Age:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.age || selectedPatient?.age || ''}</div>
+                  <div><span className="font-medium">Sex:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.gender || selectedPatient?.gender || selectedPatient?.sex || ''}</div>
+                  <div><span className="font-medium">Residence:</span> {selectedPatient?.village || selectedPatient?.address?.village || 'N/A'}</div>
+                  <div><span className="font-medium">Occupation:</span> {selectedPatient?.occupation || 'N/A'}</div>
                 </div>
                 <div className="space-y-2">
                   <div><span className="font-medium text-blue-600">Scheme:</span></div>
@@ -490,56 +593,64 @@ const Laboratory: React.FC = () => {
                   className="pl-10"
                 />
               </div>
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
-                    <tr>
+                    <tr className="border-b">
                       <th className="text-left p-2 font-medium">Q. No</th>
-                      <th className="text-left p-2 font-medium">OPD No</th>
                       <th className="text-left p-2 font-medium">Name</th>
                       <th className="text-left p-2 font-medium">From</th>
                       <th className="text-left p-2 font-medium">Mins</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredRequests.length > 0 ? (
-                      // Group requests by patient and show unique patients
-                      Array.from(new Map(filteredRequests.map(request => [
-                        request.patientId, 
-                        {
-                          patientId: request.patientId,
-                          patientName: request.patientName,
-                          requestCount: filteredRequests.filter(r => r.patientId === request.patientId).length,
-                          latestRequest: filteredRequests
-                            .filter(r => r.patientId === request.patientId)
-                            .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())[0]
-                        }
-                      ])).values()).map((patientData, index) => (
-                        <tr 
-                          key={patientData.patientId}
-                          className={`border-t cursor-pointer hover:bg-muted/30 ${
-                            selectedPatientId === patientData.patientId ? 'bg-primary/10' : ''
-                          }`}
-                          onClick={() => handlePatientSelect(patientData.patientId, patientData.patientName)}
-                        >
-                          <td className="p-2">{index + 1}</td>
-                          <td className="p-2">{patientData.patientId}</td>
-                          <td className="p-2">{patientData.patientName}</td>
-                          <td className="p-2">Lab</td>
-                          <td className="p-2">{Math.floor((new Date().getTime() - new Date(patientData.latestRequest.requestedAt).getTime()) / (1000 * 60))}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} className="h-[120px] text-center text-muted-foreground align-middle">
-                          <div className="flex items-center justify-center h-full">
-                            No data available in table
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
                 </table>
+                <div className="h-[150px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                    {(() => {
+                      // Group requests by patient and show unique patients
+                      const uniquePatients = Array.from(new Map(filteredRequests.map(request => [
+                        request.patient_id || request.patientId, 
+                        {
+                          patientId: request.patient_id || request.patientId,
+                          patientName: request.patient_name || request.patientName,
+                          requestCount: filteredRequests.filter(r => (r.patient_id || r.patientId) === (request.patient_id || request.patientId)).length,
+                          latestRequest: filteredRequests
+                            .filter(r => (r.patient_id || r.patientId) === (request.patient_id || request.patientId))
+                            .sort((a, b) => new Date(b.requested_at || b.requestedAt).getTime() - new Date(a.requested_at || a.requestedAt).getTime())[0]
+                        }
+                      ])).values());
+
+                      if (uniquePatients.length > 0) {
+                        return uniquePatients.map((patientData, index) => (
+                          <tr 
+                            key={patientData.patientId}
+                            className={`border-t cursor-pointer hover:bg-muted/30 ${
+                              selectedPatientId === patientData.patientId ? 'bg-primary/10' : ''
+                            }`}
+                            onClick={() => handlePatientSelect(patientData.patientId, patientData.patientName)}
+                          >
+                            <td className="p-2">{index + 1}</td>
+                            <td className="p-2">{patientData.patientName}</td>
+                            <td className="p-2">Lab</td>
+                            <td className="p-2">{Math.floor((new Date().getTime() - new Date(patientData.latestRequest.requested_at || patientData.latestRequest.requestedAt || new Date()).getTime()) / (1000 * 60)) || 0}</td>
+                          </tr>
+                        ));
+                      } else {
+                        return (
+                          <tr>
+                            <td colSpan={4} className="h-[130px] text-center text-muted-foreground align-middle">
+                              <div className="flex items-center justify-center h-full">
+                                No data available in table
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                    })()}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -567,13 +678,81 @@ const Laboratory: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td className="h-[300px] text-center text-muted-foreground align-middle">
-                          <div className="flex items-center justify-center h-full">
-                            No data available in table
-                          </div>
-                        </td>
-                      </tr>
+                      {selectedPatientRequests.length > 0 ? (
+                        (() => {
+                          // Group tests by date
+                          const groupedByDate = selectedPatientRequests.reduce((groups, request) => {
+                            const requestDate = new Date(request.requested_at || request.requestedAt);
+                            const dateKey = requestDate.toDateString();
+                            if (!groups[dateKey]) {
+                              groups[dateKey] = [];
+                            }
+                            groups[dateKey].push(request);
+                            return groups;
+                          }, {});
+
+                          // Sort dates in descending order (newest first)
+                          const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
+                            new Date(b).getTime() - new Date(a).getTime()
+                          );
+
+                          return sortedDates.map(dateKey => (
+                            <React.Fragment key={dateKey}>
+                              {/* Date Header Row */}
+                              <tr className="bg-muted/30">
+                                <td className="p-2 font-semibold text-sm text-primary">
+                                  {new Date(dateKey).toLocaleDateString('en-US', { 
+                                    weekday: 'short',
+                                    month: 'short', 
+                                    day: 'numeric', 
+                                    year: 'numeric' 
+                                  })}
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({groupedByDate[dateKey].length} test{groupedByDate[dateKey].length !== 1 ? 's' : ''})
+                                  </span>
+                                </td>
+                              </tr>
+                              {/* Tests for this date */}
+                              {groupedByDate[dateKey]
+                                .sort((a, b) => new Date(b.requested_at || b.requestedAt).getTime() - new Date(a.requested_at || a.requestedAt).getTime())
+                                .map((request, index) => (
+                                <tr 
+                                  key={request.id}
+                                  className={`border-t cursor-pointer hover:bg-muted/30 ${
+                                    selectedTestRequest?.id === request.id ? 'bg-primary/10' : ''
+                                  }`}
+                                  onClick={() => {
+                                    setSelectedTestRequest(request);
+                                    setTestName(request.test_name || request.testType);
+                                    loadTestComponents(request.test_name || request.testType);
+                                  }}
+                                >
+                                  <td className="p-3 pl-6">
+                                    <div className="flex items-center justify-between">
+                                      <span>{request.test_name || request.testType}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {new Date(request.requested_at || request.requestedAt).toLocaleTimeString('en-US', {
+                                          hour: 'numeric',
+                                          minute: '2-digit',
+                                          hour12: true
+                                        })}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          ));
+                        })()
+                      ) : (
+                        <tr>
+                          <td className="h-[300px] text-center text-muted-foreground align-middle">
+                            <div className="flex items-center justify-center h-full">
+                              {selectedPatientId ? 'No tests found for this patient' : 'Select a patient to view tests'}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -583,7 +762,7 @@ const Laboratory: React.FC = () => {
               <div className="lg:col-span-2">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <span className="font-medium">Test:</span> {selectedTestRequest?.testType || ''}
+                    <span className="font-medium">Test:</span> {selectedTestRequest?.test_name || selectedTestRequest?.testType || ''}
                   </div>
                   <div>
                     <span className="font-medium">Specimen:</span>
@@ -611,52 +790,56 @@ const Laboratory: React.FC = () => {
                         <th className="text-left p-3 font-medium">Clear</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {testComponents.length > 0 ? (
-                        testComponents.map((component, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="p-3 font-medium">{component.name}</td>
-                            <td className="p-3">{component.normalRangeMin || ''}</td>
-                            <td className="p-3">{component.normalRangeMax || ''}</td>
-                            <td className="p-3">{component.unit}</td>
-                            <td className="p-3">
-                              <Input
-                                value={component.value}
-                                onChange={(e) => updateComponentValue(index, 'value', e.target.value)}
-                                onBlur={() => handleComponentBlur(index)}
-                                className="h-8 w-20"
-                              />
-                            </td>
-                            <td className="p-3">
-                              <Select>
-                                <SelectTrigger className="h-8 w-24">
-                                  <SelectValue placeholder="Result" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="normal">Normal</SelectItem>
-                                  <SelectItem value="high">High</SelectItem>
-                                  <SelectItem value="low">Low</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="p-3">
-                              <Button variant="outline" size="sm" className="h-8">
-                                Clear
-                              </Button>
+                  </table>
+                  <div className="h-[300px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {testComponents.length > 0 ? (
+                          testComponents.map((component, index) => (
+                            <tr key={index} className="border-t">
+                              <td className="p-3 font-medium w-[20%]">{component.name}</td>
+                              <td className="p-3 w-[12%]">{component.normalRangeMin || ''}</td>
+                              <td className="p-3 w-[12%]">{component.normalRangeMax || ''}</td>
+                              <td className="p-3 w-[12%]">{component.unit}</td>
+                              <td className="p-3 w-[16%]">
+                                <Input
+                                  value={component.value}
+                                  onChange={(e) => updateComponentValue(index, 'value', e.target.value)}
+                                  onBlur={() => handleComponentBlur(index)}
+                                  className="h-8 w-20"
+                                />
+                              </td>
+                              <td className="p-3 w-[16%]">
+                                <Select>
+                                  <SelectTrigger className="h-8 w-24">
+                                    <SelectValue placeholder="Result" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="normal">Normal</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                    <SelectItem value="low">Low</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="p-3 w-[12%]">
+                                <Button variant="outline" size="sm" className="h-8">
+                                  Clear
+                                </Button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="h-[300px] text-center text-muted-foreground align-middle">
+                              <div className="flex items-center justify-center h-full">
+                                No data available in table
+                              </div>
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} className="h-[300px] text-center text-muted-foreground align-middle">
-                            <div className="flex items-center justify-center h-full">
-                              No data available in table
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
                 
                 <div className="flex items-center justify-between mt-4">
@@ -691,45 +874,46 @@ const Laboratory: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
+              <table className="w-full text-sm table-fixed">
+                <thead className="bg-muted/50 block w-full">
+                  <tr className="table-row">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
                       Request No <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
                       Visit Id <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
                       Name <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
                       Requested On <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="block max-h-[200px] overflow-y-auto">
                   {filteredRequests.length > 0 ? (
-                    filteredRequests.slice(0, 10).map((request, index) => (
+                    filteredRequests.map((request, index) => (
                       <tr 
                         key={request.id} 
-                        className={`border-t cursor-pointer hover:bg-muted/30 ${
+                        className={`table-row border-t cursor-pointer hover:bg-muted/30 ${
                           selectedTestRequest?.id === request.id ? 'bg-primary/10' : ''
                         }`}
                         onClick={() => {
                           setSelectedTestRequest(request);
-                          setTestName(request.testType);
+                          setTestName(request.test_name || request.testType);
                           // Also select the patient
-                          const patientData = groupedRequests[request.patientId];
-                          if (patientData) {
-                            handlePatientSelect(request.patientId, patientData.patient?.fullName || 'Unknown');
+                          const patientId = request.patient_id || request.patientId;
+                          const patientName = request.patient_name || request.patientName;
+                          if (patientId && patientName) {
+                            handlePatientSelect(patientId, patientName);
                           }
                         }}
                       >
-                        <td className="p-3">{66 + index}</td>
-                        <td className="p-3">{request.visitId || (174 + index)}</td>
-                        <td className="p-3">{request.patientName}</td>
-                        <td className="p-3">{new Date(request.requestedAt).toLocaleDateString('en-US', { 
+                        <td className="p-3 w-1/4">{request.id}</td>
+                        <td className="p-3 w-1/4">{request.visit_id || request.visitId}</td>
+                        <td className="p-3 w-1/4">{request.patient_name || request.patientName}</td>
+                        <td className="p-3 w-1/4">{new Date(request.requested_at || request.requestedAt).toLocaleDateString('en-US', { 
                           month: 'short', 
                           day: 'numeric', 
                           year: 'numeric',

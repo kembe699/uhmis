@@ -13,13 +13,24 @@ router.get('/', async (req, res) => {
     }
 
     const [results] = await sequelize.query(`
-      SELECT * FROM lab_requests 
-      WHERE clinic_id = ? 
-      ORDER BY requested_at DESC
+      SELECT 
+        lr.*,
+        p.first_name,
+        p.last_name,
+        p.date_of_birth,
+        p.gender,
+        p.patient_id,
+        CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+        TIMESTAMPDIFF(YEAR, p.date_of_birth, CURDATE()) as age
+      FROM lab_requests lr
+      LEFT JOIN patients p ON lr.patient_id = p.id
+      WHERE lr.clinic_id = ? 
+      ORDER BY lr.requested_at DESC
     `, {
       replacements: [clinic]
     });
 
+    console.log('Lab requests query results:', JSON.stringify(results, null, 2));
     res.json(results);
   } catch (error) {
     console.error('Error fetching lab requests:', error);
@@ -30,6 +41,8 @@ router.get('/', async (req, res) => {
 // Create new lab request
 router.post('/', async (req, res) => {
   try {
+    console.log('Lab request creation - received body:', JSON.stringify(req.body, null, 2));
+    
     const {
       patient_id,
       patient_name,
@@ -37,32 +50,57 @@ router.post('/', async (req, res) => {
       test_id,
       test_name,
       test_code,
+      test_type,
       requested_by,
+      requested_at,
       priority = 'normal',
       notes,
-      visit_id
+      visit_id,
+      status = 'pending',
+      bill_id
     } = req.body;
+
+    // Validate required fields
+    if (!patient_id || !patient_name || !clinic_id) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: patient_id, patient_name, clinic_id' 
+      });
+    }
+
+    if (!test_name && !test_code && !test_type) {
+      return res.status(400).json({ 
+        error: 'At least one of test_name, test_code, or test_type is required' 
+      });
+    }
 
     const requestId = uuidv4();
     
     const insertQuery = `
       INSERT INTO lab_requests (
-        id, patient_id, patient_name, clinic_id, test_id, test_name, 
-        test_code, requested_by, priority, notes, visit_id, status, requested_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+        id, patient_id, visit_id, test_code, test_name, status, priority, 
+        requested_at, requested_by, clinic_id, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
+    const replacements = [
+      requestId, 
+      patient_id, 
+      visit_id || uuidv4(), // Generate visit_id if not provided
+      test_code || null,
+      test_name || test_type || test_code, 
+      status,
+      priority, 
+      requested_at || new Date().toISOString(),
+      requested_by || 'System', 
+      clinic_id, 
+      notes || null
+    ];
+    
     console.log('Lab request insert query:', insertQuery);
-    console.log('Lab request replacements:', [
-      requestId, patient_id, patient_name, clinic_id, test_id, 
-      test_name, test_code, requested_by, priority, notes, visit_id
-    ]);
+    console.log('Lab request replacements:', replacements);
     
     await sequelize.query(insertQuery, {
-      replacements: [
-        requestId, patient_id, patient_name, clinic_id, test_id, 
-        test_name, test_code, requested_by, priority, notes, visit_id
-      ]
+      replacements: replacements
     });
 
     const [created] = await sequelize.query(`
@@ -71,10 +109,16 @@ router.post('/', async (req, res) => {
       replacements: [requestId]
     });
 
+    console.log('Lab request created successfully:', created[0]);
     res.status(201).json(created[0]);
   } catch (error) {
     console.error('Error creating lab request:', error);
-    res.status(500).json({ error: 'Failed to create lab request' });
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to create lab request',
+      details: error.message 
+    });
   }
 });
 

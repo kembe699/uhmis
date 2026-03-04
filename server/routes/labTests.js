@@ -256,10 +256,8 @@ router.post('/with-components', async (req, res) => {
       test.price = parseFloat(test.price);
     }
     
-    // Ensure service_id is properly formatted for database
-    if (test.service_id) {
-      test.service_id = parseInt(test.service_id);
-    }
+    // Keep service_id as string (UUID) - don't convert to integer
+    // Service IDs are UUIDs, not integers
     
     // Ensure clinic_id is properly formatted
     if (test.clinic_id) {

@@ -472,7 +472,99 @@ const PatientsBill: React.FC = () => {
     });
   };
 
-  // Create new bill
+  // Function to create lab requests for services linked to lab tests
+  const createLabRequestsForServices = async (services: any[], patientId: string, patientName: string, billId: string) => {
+    try {
+      // Get all lab tests to check which services are linked
+      const labTestsResponse = await fetch(`/api/lab-tests?clinic=${encodeURIComponent(user?.clinic || '1')}`, {
+        credentials: 'include'
+      });
+      
+      if (!labTestsResponse.ok) {
+        console.warn('Could not fetch lab tests for service linking');
+        return;
+      }
+      
+      const labTests = await labTestsResponse.json();
+      
+      // Find services that match lab test service_ids
+      const labLinkedServices = services.filter(service => {
+        return labTests.some(labTest => labTest.service_id && 
+          (labTest.service_id.toString() === service.serviceId?.toString() || 
+           labTest.test_name === service.serviceName ||
+           labTest.test_code === service.serviceName));
+      });
+      
+      if (labLinkedServices.length === 0) {
+        console.log('No lab-linked services found in this bill');
+        return;
+      }
+      
+      // Create lab requests for each lab-linked service
+      for (const service of labLinkedServices) {
+        const matchingLabTest = labTests.find(labTest => 
+          labTest.service_id?.toString() === service.serviceId?.toString() || 
+          labTest.test_name === service.serviceName ||
+          labTest.test_code === service.serviceName
+        );
+        
+        if (matchingLabTest) {
+          // Generate UUID for visit_id
+          const generateUUID = () => {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+              const r = Math.random() * 16 | 0;
+              const v = c == 'x' ? r : (r & 0x3 | 0x8);
+              return v.toString(16);
+            });
+          };
+          
+          const labRequestData = {
+            patient_id: patientId,
+            visit_id: generateUUID(), // Generate visit_id as required by schema
+            test_name: matchingLabTest.test_name,
+            test_code: matchingLabTest.test_code,
+            clinic_id: parseInt(user?.clinic || '1'),
+            requested_by: user?.displayName || 'Billing System',
+            requested_at: new Date().toISOString(),
+            status: 'pending',
+            priority: 'normal',
+            notes: `Auto-created from bill for service: ${service.serviceName}`
+          };
+          
+          console.log('Sending lab request data:', JSON.stringify(labRequestData, null, 2));
+          
+          const labRequestResponse = await fetch('/api/lab-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(labRequestData)
+          });
+          
+          console.log('Lab request response status:', labRequestResponse.status);
+          if (!labRequestResponse.ok) {
+            const errorText = await labRequestResponse.text();
+            console.error('Lab request error response:', errorText);
+          }
+          
+          if (labRequestResponse.ok) {
+            console.log(`Lab request created for ${matchingLabTest.test_name}`);
+          } else {
+            console.warn(`Failed to create lab request for ${matchingLabTest.test_name}`);
+          }
+        }
+      }
+      
+      if (labLinkedServices.length > 0) {
+        toast.success(`Bill created with ${labLinkedServices.length} lab request(s) automatically generated`);
+      }
+      
+    } catch (error) {
+      console.error('Error creating lab requests:', error);
+      // Don't fail the bill creation if lab request creation fails
+    }
+  };
+
+  // Create new bill or add to existing daily bill
   const handleCreateBill = async () => {
     // Validate patient information
     if (!newBillData.isWalkIn && !newBillData.patientId) {
@@ -507,11 +599,19 @@ const PatientsBill: React.FC = () => {
         patientName = `${patient.first_name} ${patient.last_name}`;
       }
       
+      // Check for existing bill for this patient today
+      const today = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD format
+      const existingTodayBill = bills.find(bill => {
+        const billDate = new Date(bill.billDate).toISOString().split('T')[0];
+        return bill.patientId === patientId && billDate === today && bill.status === 'pending';
+      });
+
       // Build services array
       const services = newBillData.selectedServices.map(s => ({
         serviceName: s.serviceName,
         name: s.serviceName,
         service_name: s.serviceName,
+        serviceId: s.serviceId,
         quantity: s.quantity,
         unitPrice: s.price,
         unit_price: s.price,
@@ -523,36 +623,64 @@ const PatientsBill: React.FC = () => {
 
       const totalAmount = services.reduce((sum, s) => sum + s.totalPrice, 0);
 
-      // Build notes with walk-in patient info if applicable
-      let notes = newBillData.notes || 'Bill created from billing page';
-      if (newBillData.isWalkIn) {
-        notes += `\nWalk-in Patient - Age: ${newBillData.walkInPatient.age || 'N/A'}, Gender: ${newBillData.walkInPatient.gender || 'N/A'}, Phone: ${newBillData.walkInPatient.phone || 'N/A'}`;
+      if (existingTodayBill) {
+        // Add services to existing bill
+        console.log('Found existing bill for today, adding services to bill:', existingTodayBill.id);
+        
+        const response = await fetch(`/api/patient-bills/${existingTodayBill.id}/add-services`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ services: services })
+        });
+
+        if (!response.ok) throw new Error('Failed to add services to existing bill');
+
+        const updatedBill = await response.json();
+        
+        // Check if any services are linked to lab tests and create lab requests
+        await createLabRequestsForServices(services, patientId, patientName, existingTodayBill.id);
+
+        toast.success(`Services added to existing bill for today (${services.length} item(s))`);
+      } else {
+        // Create new bill
+        console.log('No existing bill found for today, creating new bill');
+        
+        // Build notes with walk-in patient info if applicable
+        let notes = newBillData.notes || 'Bill created from billing page';
+        if (newBillData.isWalkIn) {
+          notes += `\nWalk-in Patient - Age: ${newBillData.walkInPatient.age || 'N/A'}, Gender: ${newBillData.walkInPatient.gender || 'N/A'}, Phone: ${newBillData.walkInPatient.phone || 'N/A'}`;
+        }
+
+        const billData = {
+          patient_id: patientId,
+          patient_name: patientName,
+          clinic_id: parseInt(user?.clinic || '1'),
+          total_amount: totalAmount,
+          paid_amount: 0,
+          balance_amount: totalAmount,
+          status: 'pending',
+          services: JSON.stringify(services),
+          notes: notes,
+          created_by: user?.displayName || 'Unknown',
+          bill_date: new Date().toISOString(),
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        };
+
+        const response = await fetch('/api/patient-bills', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(billData)
+        });
+
+        if (!response.ok) throw new Error('Failed to create bill');
+
+        const createdBill = await response.json();
+        
+        // Check if any services are linked to lab tests and create lab requests
+        await createLabRequestsForServices(services, patientId, patientName, createdBill.id);
+
+        toast.success('New bill created successfully');
       }
-
-      const billData = {
-        patient_id: patientId,
-        patient_name: patientName,
-        clinic_id: parseInt(user?.clinic || '1'),
-        total_amount: totalAmount,
-        paid_amount: 0,
-        balance_amount: totalAmount,
-        status: 'pending',
-        services: JSON.stringify(services),
-        notes: notes,
-        created_by: user?.displayName || 'Unknown',
-        bill_date: new Date().toISOString(),
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      };
-
-      const response = await fetch('/api/patient-bills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(billData)
-      });
-
-      if (!response.ok) throw new Error('Failed to create bill');
-
-      toast.success('Bill created successfully');
       setShowNewBillModal(false);
       setNewBillData({
         patientId: '',

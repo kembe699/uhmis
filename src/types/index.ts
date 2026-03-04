@@ -153,15 +153,27 @@ export interface Dispensing {
 
 export interface LabRequest {
   id: string;
-  patientId: string;
-  patientName: string;
-  visitId: string;
-  testType: string;
-  requestedBy: string;
-  requestedAt: string;
+  patient_id: string;
+  patient_name: string;
+  visit_id: string;
+  test_name: string;
+  test_code: string;
+  requested_by: string;
+  requested_at: string;
   status: 'pending' | 'partial' | 'completed' | 'results_sent';
-  clinic: ClinicName;
-  priority: 'routine' | 'urgent';
+  clinic_id: number;
+  priority: 'normal' | 'urgent' | 'stat';
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+  // Legacy camelCase fields for backward compatibility
+  patientId?: string;
+  patientName?: string;
+  visitId?: string;
+  testType?: string;
+  requestedBy?: string;
+  requestedAt?: string;
+  clinic?: ClinicName;
   lastSavedAt?: string;
   savedBy?: string;
 }
@@ -205,7 +217,10 @@ export interface LabTestComponent {
   unit: string;
   normalRangeMin?: number;
   normalRangeMax?: number;
-  normalRangeText?: string; // For non-numeric ranges like "Negative"
+  normalRangeText?: string;
+  // Database fields for compatibility
+  component_name?: string;
+  reference_range?: string;
 }
 
 export interface LabTest {

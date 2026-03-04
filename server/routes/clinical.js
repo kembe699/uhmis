@@ -140,8 +140,10 @@ router.get('/visits/:clinicId/:doctorId', async (req, res) => {
 router.post('/visits', async (req, res) => {
   try {
     const visitData = req.body;
+    console.log('=== CLINICAL ROUTE: Creating visit with data ===');
     console.log('Creating visit with data:', visitData);
     console.log('Vitals data received:', visitData.vitals);
+    console.log('Lab requests received:', visitData.lab_requests);
     
     const visit = await Visit.create(visitData);
     console.log('Visit created successfully:', visit.id);
@@ -163,14 +165,33 @@ router.post('/visits', async (req, res) => {
     }
     
     // Add lab tests to existing patient bill and create lab requests if lab requests exist
-    if (visitData.lab_requests && visitData.lab_requests.length > 0) {
+    console.log('Checking for lab_requests in visitData:', visitData.lab_requests);
+    console.log('Type of lab_requests:', typeof visitData.lab_requests);
+    
+    let labRequests = visitData.lab_requests;
+    
+    // Parse lab_requests if it's a string
+    if (typeof labRequests === 'string' && labRequests.trim()) {
       try {
-        await addLabTestsToExistingBill(visitData);
-        await createLabRequestsFromVisit(visitData, visit);
+        labRequests = JSON.parse(labRequests);
+        console.log('Parsed lab_requests:', labRequests);
+      } catch (parseError) {
+        console.error('Error parsing lab_requests JSON:', parseError);
+        labRequests = null;
+      }
+    }
+    
+    if (labRequests && Array.isArray(labRequests) && labRequests.length > 0) {
+      console.log('Processing lab requests:', labRequests);
+      try {
+        await addLabTestsToExistingBill({ ...visitData, lab_requests: labRequests });
+        await createLabRequestsFromVisit({ ...visitData, lab_requests: labRequests }, visit);
       } catch (billError) {
         console.error('Error adding lab tests to bill or creating lab requests:', billError);
         // Don't fail visit creation if bill update fails
       }
+    } else {
+      console.log('No lab requests to process');
     }
     
     res.json(visit);
@@ -638,26 +659,25 @@ async function createLabRequestsFromVisit(visitData, visit) {
       try {
         const requestId = uuidv4();
         
-        // Create lab request directly in database
+        // Create lab request directly in database - matching actual table structure
         const insertQuery = `
           INSERT INTO lab_requests (
-            id, patient_id, patient_name, clinic_id, test_id, test_name, 
-            test_code, requested_by, priority, notes, visit_id, status, requested_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+            id, patient_id, visit_id, test_code, test_name, status, 
+            priority, requested_by, clinic_id, notes, requested_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         `;
         
         const replacements = [
           requestId,
           visitData.patient_id,
-          visitData.patient_name || 'Unknown Patient',
-          visitData.clinic_id,
-          null, // test_id - will be null for now
-          testName,
+          visit.id, // visit_id
           testName.substring(0, 3).toUpperCase(), // test_code
-          visitData.doctor_name || 'Clinical Staff',
+          testName, // test_name
+          'pending', // status
           'normal', // priority
-          'Lab test requested during clinical visit',
-          visit.id // visit_id
+          visitData.doctor_id || visitData.user_id || '723d4f28-9b59-4006-a012-03bdff7c30b6', // requested_by (must be user ID)
+          visitData.clinic_id, // clinic_id
+          'Lab test requested during clinical visit' // notes
         ];
         
         console.log('Creating lab request with data:', {
@@ -667,6 +687,9 @@ async function createLabRequestsFromVisit(visitData, visit) {
           test_name: testName,
           visit_id: visit.id
         });
+        
+        console.log('Executing SQL query:', insertQuery);
+        console.log('With replacements:', replacements);
         
         await sequelize.query(insertQuery, { replacements });
         console.log(`Lab request created successfully for test: ${testName}`);

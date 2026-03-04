@@ -40,13 +40,27 @@ class ClinicalApiClient {
 
   async createVisit(visitData: Record<string, unknown>): Promise<Record<string, unknown>> {
     try {
+      console.log('Making POST request to:', `${this.baseUrl}/visits`);
+      console.log('Request payload:', visitData);
+      
       const response = await fetch(`${this.baseUrl}/visits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(visitData),
       });
-      if (!response.ok) throw new Error('Failed to create visit');
-      return await response.json();
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to create visit: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('API response:', result);
+      return result;
     } catch (error) {
       console.error('Error creating visit:', error);
       throw error;
@@ -1046,12 +1060,17 @@ const Clinical: React.FC = () => {
         diagnosis_code: visitForm.diagnosisCode || null
       };
 
+      console.log('Sending visit data with lab_requests:', mysqlVisitData.lab_requests);
+      console.log('Selected lab tests:', selectedLabTests);
+      
+      console.log('About to call clinicalApi.createVisit...');
       const visitDoc = await clinicalApi.createVisit(mysqlVisitData);
+      console.log('Visit creation response:', visitDoc);
 
-      // Create patient bill and lab requests if lab tests are selected
+      // Create patient bill if lab tests are selected
+      // Note: Lab requests are automatically created by the backend when visit is saved
       if (selectedLabTests.length > 0) {
         await createPatientBillForLabTests(visitDoc, selectedLabTests);
-        await createLabRequests(visitDoc, selectedLabTests);
       }
 
       // TODO: Save diagnosis when diagnosis system is implemented

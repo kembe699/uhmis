@@ -9,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext.mysql.pure';
 import { Plus, Trash2, Edit, TestTube, X, Database, Search, Download, Upload, FileText, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
@@ -46,9 +46,40 @@ const LabTests: React.FC = () => {
   ]);
 
   useEffect(() => {
-    fetchTests();
-    fetchServices();
-  }, [user?.clinic]);
+    if (user?.clinic) {
+      // Fetch services first, then tests to ensure services are available for lookup
+      const loadData = async () => {
+        await fetchServices();
+        await fetchTests();
+      };
+      loadData();
+    }
+  }, [user]);
+
+  const fetchServices = async () => {
+    console.log('LabTests fetchServices called, user:', user);
+    
+    try {
+      // Use default clinic if user clinic not available
+      const clinicId = user?.clinic || '1';
+      console.log('Fetching services for clinic:', clinicId);
+      
+      const response = await fetch(`/api/clinical/services/${clinicId}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch services');
+      }
+      
+      const servicesData = await response.json();
+      setServices(servicesData || []);
+      console.log('Successfully loaded', (servicesData || []).length, 'services');
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      setServices([]); // Set empty array on error
+    }
+  };
 
   const fetchTests = async () => {
     console.log('LabTests fetchTests called, user:', user);
@@ -85,6 +116,8 @@ const LabTests: React.FC = () => {
         testName: test.test_name || test.testName,
         testCode: test.test_code || test.testCode,
         category: test.category,
+        price: test.price,
+        service_id: test.service_id,
         components: test.components || [],
         clinic: test.clinic_id || test.clinic,
         createdBy: test.created_by || test.createdBy,
@@ -94,36 +127,13 @@ const LabTests: React.FC = () => {
       
       setTests(transformedTests);
       console.log('Successfully loaded', transformedTests.length, 'lab tests');
+      console.log('Sample test with service_id:', transformedTests[0]?.service_id, typeof transformedTests[0]?.service_id);
+      console.log('Available services at test load time:', services.length, services.map(s => ({ id: s.id, type: typeof s.id, name: s.service_name })));
     } catch (error) {
       console.error('Error fetching tests:', error);
       setTests([]); // Set empty array on error
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchServices = async () => {
-    console.log('LabTests fetchServices called, user:', user);
-    
-    try {
-      // Use default clinic if user clinic not available
-      const clinicId = user?.clinic || '1';
-      console.log('Fetching services for clinic:', clinicId);
-      
-      const response = await fetch(`/api/clinical/services/${clinicId}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch services');
-      }
-      
-      const servicesData = await response.json();
-      setServices(servicesData || []);
-      console.log('Successfully loaded', (servicesData || []).length, 'services');
-    } catch (error) {
-      console.error('Error fetching services:', error);
-      setServices([]); // Set empty array on error
     }
   };
 
@@ -144,7 +154,19 @@ const LabTests: React.FC = () => {
     setCategory(test.category);
     setSelectedService(test.service_id?.toString() || '');
     setPrice(test.price?.toString() || '');
-    setComponents(test.components.length > 0 ? test.components : [{ name: '', unit: '', normalRangeMin: undefined, normalRangeMax: undefined, normalRangeText: '' }]);
+    
+    // Transform database components to frontend format
+    const transformedComponents = test.components.length > 0 
+      ? test.components.map(comp => ({
+          name: comp.component_name || comp.name || '',
+          unit: comp.unit || '',
+          normalRangeMin: undefined,
+          normalRangeMax: undefined,
+          normalRangeText: comp.reference_range || comp.normalRangeText || ''
+        }))
+      : [{ name: '', unit: '', normalRangeMin: undefined, normalRangeMax: undefined, normalRangeText: '' }];
+    
+    setComponents(transformedComponents);
     setDialogOpen(true);
   };
 
@@ -182,6 +204,8 @@ const LabTests: React.FC = () => {
     }
 
     const validComponents = components.filter(c => c.name && c.name.trim() !== '');
+    console.log('Valid components before transformation:', JSON.stringify(validComponents, null, 2));
+    
     if (validComponents.length === 0) {
       toast.error('Please add at least one component');
       return;
@@ -195,7 +219,7 @@ const LabTests: React.FC = () => {
         category,
         clinic_id: user?.clinic,
         price: parseFloat(price) || 0,
-        service_id: selectedService ? parseInt(selectedService) : null,
+        service_id: selectedService || null,
         ...(editingTest ? {} : { created_by: user?.displayName })
       };
 
@@ -203,15 +227,17 @@ const LabTests: React.FC = () => {
       const method = editingTest ? 'PUT' : 'POST';
 
       // Transform components to match backend expectations
-      const transformedComponents = validComponents.map(comp => ({
+      const transformedComponents = validComponents.map((comp, index) => ({
         component_name: comp.name || '',
         unit: comp.unit || '',
         reference_range: comp.normalRangeText || 
           (comp.normalRangeMin !== undefined && comp.normalRangeMax !== undefined 
             ? `${comp.normalRangeMin}-${comp.normalRangeMax}` 
             : ''),
-        sort_order: 0
+        sort_order: index
       })).filter(comp => comp.component_name.trim() !== ''); // Filter out empty component names
+      
+      console.log('Transformed components for API:', JSON.stringify(transformedComponents, null, 2));
 
       const requestBody = editingTest ? {
         test: {
@@ -219,7 +245,7 @@ const LabTests: React.FC = () => {
           test_code: testCode.toUpperCase(),
           category,
           price: parseFloat(price) || 0,
-          service_id: selectedService ? parseInt(selectedService) : null
+          service_id: selectedService || null
         },
         components: transformedComponents
       } : {
@@ -228,6 +254,8 @@ const LabTests: React.FC = () => {
       };
 
       console.log('Request body:', JSON.stringify(requestBody, null, 2));
+      console.log('Service ID being sent:', selectedService);
+      console.log('Price being sent:', price);
 
       const response = await fetch(url, {
         method,
@@ -402,10 +430,6 @@ const LabTests: React.FC = () => {
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </Button>
-            <Button onClick={seedLabTests} variant="outline" className="h-9">
-              <Database className="w-4 h-4 mr-2" />
-              Seed Lab Tests
-            </Button>
             <Dialog open={dialogOpen} onOpenChange={(open) => {
               setDialogOpen(open);
               if (!open) resetForm();
@@ -419,6 +443,9 @@ const LabTests: React.FC = () => {
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingTest ? 'Edit Lab Test' : 'Add New Lab Test'}</DialogTitle>
+                <DialogDescription>
+                  {editingTest ? 'Update the lab test details and components below.' : 'Create a new lab test by filling in the details and adding components.'}
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-3 gap-4">
@@ -545,7 +572,7 @@ const LabTests: React.FC = () => {
                             <Input
                               type="number"
                               step="0.01"
-                              value={component.normalRangeMin ?? ''}
+                              value={component.normalRangeMin?.toString() ?? ''}
                               onChange={(e) => updateComponent(index, 'normalRangeMin', e.target.value ? parseFloat(e.target.value) : undefined)}
                               placeholder="Min"
                             />
@@ -555,7 +582,7 @@ const LabTests: React.FC = () => {
                             <Input
                               type="number"
                               step="0.01"
-                              value={component.normalRangeMax ?? ''}
+                              value={component.normalRangeMax?.toString() ?? ''}
                               onChange={(e) => updateComponent(index, 'normalRangeMax', e.target.value ? parseFloat(e.target.value) : undefined)}
                               placeholder="Max"
                             />
@@ -640,6 +667,8 @@ const LabTests: React.FC = () => {
                     <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Test Code</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Test Name</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Category</th>
+                    <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Service</th>
+                    <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Price</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm text-foreground">Components</th>
                     <th className="text-right py-3 px-4 font-semibold text-sm text-foreground">Actions</th>
                   </tr>
@@ -660,6 +689,22 @@ const LabTests: React.FC = () => {
                       <td className="py-3 px-4">
                         <span className="text-sm text-muted-foreground">
                           {test.category}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-muted-foreground">
+                          {(() => {
+                            if (!test.service_id) return '-';
+                            const service = services.find(s => s.id.toString() === test.service_id.toString());
+                            console.log(`Looking for service_id: ${test.service_id}, found:`, service);
+                            console.log('Available service IDs:', services.map(s => s.id));
+                            return service?.service_name || 'Unknown Service';
+                          })()}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-muted-foreground">
+                          {test.price ? `$${parseFloat(test.price.toString()).toFixed(2)}` : '-'}
                         </span>
                       </td>
                       <td className="py-3 px-4">

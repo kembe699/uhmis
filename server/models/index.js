@@ -151,7 +151,7 @@ const LabTest = sequelize.define('LabTest', {
     allowNull: true,
   },
   service_id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING,
     allowNull: true,
   },
   clinic_id: {

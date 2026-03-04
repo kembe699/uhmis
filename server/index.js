@@ -66,7 +66,12 @@ app.use('/api/lab-requests', labRequestsRouter);
 app.use('/api/lab-results', labResultsRouter);
 app.use('/api/patient-queue', patientQueueRouter);
 app.use('/api/dashboard', dashboardRouter);
-app.use('/api/clinical', clinicalRouter);
+// Add request logging middleware for clinical routes
+app.use('/api/clinical', (req, res, next) => {
+  console.log(`=== CLINICAL REQUEST: ${req.method} ${req.url} ===`);
+  console.log('Request body:', req.body);
+  next();
+}, clinicalRouter);
 app.use('/api/pharmacy', pharmacyRouter);
 app.use('/api/patient-bills', patientBillsRouter);
 app.use('/api/clinics', clinicsRouter);
