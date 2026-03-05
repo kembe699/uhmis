@@ -172,11 +172,18 @@ router.get('/category/:category', async (req, res) => {
   }
 });
 
-// Get lab test by code
+// Get lab test by code (also tries test_name as fallback)
 router.get('/code/:code', async (req, res) => {
   try {
+    const { Op } = require('sequelize');
+    const code = req.params.code;
     const labTest = await LabTest.findOne({
-      where: { test_code: req.params.code },
+      where: {
+        [Op.or]: [
+          { test_code: code },
+          { test_name: code }
+        ]
+      },
       include: [{
         model: LabTestComponent,
         as: 'components',
@@ -231,6 +238,7 @@ router.post('/', async (req, res) => {
 // Create lab test with components
 router.post('/with-components', async (req, res) => {
   const transaction = await LabTest.sequelize.transaction();
+  const crypto = require('crypto');
   
   try {
     const { test, components } = req.body;
@@ -238,132 +246,94 @@ router.post('/with-components', async (req, res) => {
     console.log('Creating lab test with data:', JSON.stringify({ test, components }, null, 2));
     
     // Validate required fields
-    if (!test.test_name) {
-      return res.status(400).json({ error: 'test_name is required' });
-    }
-    if (!test.test_code) {
-      return res.status(400).json({ error: 'test_code is required' });
-    }
-    if (!test.category) {
-      return res.status(400).json({ error: 'category is required' });
-    }
-    if (!test.clinic_id) {
-      return res.status(400).json({ error: 'clinic_id is required' });
+    if (!test.test_name || !test.test_code || !test.category || !test.clinic_id) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'test_name, test_code, category and clinic_id are required' });
     }
     
-    // Ensure price is properly formatted for database
-    if (test.price) {
-      test.price = parseFloat(test.price);
-    }
-    
-    // Keep service_id as string (UUID) - don't convert to integer
-    // Service IDs are UUIDs, not integers
-    
-    // Ensure clinic_id is properly formatted
-    if (test.clinic_id) {
-      test.clinic_id = parseInt(test.clinic_id);
-    }
-    
-    // Add default values for required fields
-    const testData = {
-      ...test,
-      is_active: true,
-      created_by: null // Remove foreign key constraint by setting to null
-    };
-    
+    const testCode = test.test_code.toUpperCase();
+    const clinicId = parseInt(test.clinic_id);
+    const price = parseFloat(test.price) || 0;
+    const serviceId = test.service_id || null;
+
     // Check if test_code already exists
-    const existingTest = await LabTest.findOne({
-      where: { test_code: test.test_code }
-    });
-    
+    const [[existingTest]] = await LabTest.sequelize.query(
+      `SELECT id FROM lab_tests WHERE test_code = ?`,
+      { replacements: [testCode], transaction }
+    );
+
+    let testId;
+
     if (existingTest) {
-      // If test exists, update it instead of creating new one
-      console.log('Test code exists, updating existing test:', existingTest.id);
-      
       // Update the existing test
-      await LabTest.update(testData, {
-        where: { id: existingTest.id },
-        transaction
-      });
-      
-      // Delete existing components
-      await LabTestComponent.destroy({
-        where: { lab_test_id: existingTest.id },
-        transaction
-      });
-      
-      // Create new components if provided
-      if (components && components.length > 0) {
-        const componentsWithTestId = components.map((component, index) => ({
-          ...component,
-          lab_test_id: existingTest.id,
-          sort_order: component.sort_order !== undefined ? component.sort_order : index
-        }));
-        
-        await LabTestComponent.bulkCreate(componentsWithTestId, { transaction });
+      testId = existingTest.id;
+      console.log('Test code exists, updating existing test:', testId);
+      await LabTest.sequelize.query(
+        `UPDATE lab_tests SET test_name = ?, category = ?, price = ?, service_id = ?, updated_at = NOW() WHERE id = ?`,
+        { replacements: [test.test_name, test.category, price, serviceId, testId], transaction }
+      );
+    } else {
+      // Create new lab test
+      testId = crypto.randomUUID();
+      console.log('Creating new lab test with id:', testId);
+      await LabTest.sequelize.query(
+        `INSERT INTO lab_tests (id, test_name, test_code, category, clinic_id, price, service_id, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())`,
+        { replacements: [testId, test.test_name, testCode, test.category, clinicId, price, serviceId], transaction }
+      );
+    }
+
+    // Only delete+replace components if we actually have valid ones to insert
+    const validComponents = Array.isArray(components)
+      ? components.filter(c => c.component_name && c.component_name.trim() !== '')
+      : [];
+
+    if (validComponents.length > 0) {
+      await LabTest.sequelize.query(
+        `DELETE FROM lab_test_components WHERE lab_test_id = ?`,
+        { replacements: [testId], transaction }
+      );
+      console.log('Inserting', validComponents.length, 'components for test:', testId);
+      for (let i = 0; i < validComponents.length; i++) {
+        const comp = validComponents[i];
+        const compId = crypto.randomUUID();
+        await LabTest.sequelize.query(
+          `INSERT INTO lab_test_components (id, lab_test_id, component_name, unit, reference_range, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          {
+            replacements: [
+              compId,
+              testId,
+              comp.component_name.trim(),
+              comp.unit || '',
+              comp.reference_range || '',
+              comp.sort_order !== undefined ? comp.sort_order : i
+            ],
+            transaction
+          }
+        );
       }
-      
-      await transaction.commit();
-      
-      // Fetch the updated lab test with components
-      const updatedLabTest = await LabTest.findByPk(existingTest.id, {
-        include: [{
-          model: LabTestComponent,
-          as: 'components',
-          order: [['sort_order', 'ASC']],
-        }],
-      });
-      
-      console.log('Lab test updated successfully:', updatedLabTest.id);
-      return res.status(200).json(updatedLabTest);
+    } else {
+      console.log('No valid components provided - preserving existing components for test:', testId);
     }
-    
-    console.log('Processed test data:', JSON.stringify(testData, null, 2));
-    
-    // Create the lab test
-    const labTest = await LabTest.create(testData, { transaction });
-    
-    // Create components if provided
-    if (components && components.length > 0) {
-      const componentsWithTestId = components.map((component, index) => ({
-        ...component,
-        lab_test_id: labTest.id,
-        sort_order: component.sort_order !== undefined ? component.sort_order : index
-      }));
-      
-      console.log('Creating components:', JSON.stringify(componentsWithTestId, null, 2));
-      
-      await LabTestComponent.bulkCreate(componentsWithTestId, { transaction });
-    }
-    
+
     await transaction.commit();
-    
-    // Fetch the complete lab test with components
-    const completeLabTest = await LabTest.findByPk(labTest.id, {
-      include: [{
-        model: LabTestComponent,
-        as: 'components',
-        order: [['sort_order', 'ASC']],
-      }],
-    });
-    
-    console.log('Lab test created successfully:', completeLabTest.id);
-    res.status(201).json(completeLabTest);
+
+    // Fetch the complete result
+    const [[savedTest]] = await LabTest.sequelize.query(
+      `SELECT * FROM lab_tests WHERE id = ?`, { replacements: [testId] }
+    );
+    const [savedComponents] = await LabTest.sequelize.query(
+      `SELECT * FROM lab_test_components WHERE lab_test_id = ? ORDER BY sort_order ASC`,
+      { replacements: [testId] }
+    );
+
+    console.log('Lab test saved successfully with', savedComponents.length, 'components');
+    res.status(existingTest ? 200 : 201).json({ ...savedTest, components: savedComponents });
+
   } catch (error) {
     await transaction.rollback();
-    console.error('Error creating lab test with components:', error);
-    console.error('Full error details:', JSON.stringify(error, null, 2));
+    console.error('Error creating lab test with components:', error.message);
     console.error('Error stack:', error.stack);
-    
-    // Provide more specific error messages
-    let errorMessage = 'Failed to create lab test with components';
-    if (error.name === 'SequelizeValidationError') {
-      errorMessage = 'Validation error: ' + error.errors.map(e => e.message).join(', ');
-    } else if (error.name === 'SequelizeUniqueConstraintError') {
-      errorMessage = 'Test code already exists. Please use a unique test code.';
-    }
-    
-    res.status(500).json({ error: errorMessage, details: error.message });
+    res.status(500).json({ error: 'Failed to save lab test with components', details: error.message });
   }
 });
 
@@ -406,49 +376,88 @@ router.put('/:id/with-components', async (req, res) => {
   try {
     const { test, components } = req.body;
     
-    // Update the lab test
-    const [updatedRows] = await LabTest.update(test, {
-      where: { id: req.params.id },
-      transaction,
-    });
+    console.log('Updating lab test id:', req.params.id, 'with data:', JSON.stringify({ test, components }, null, 2));
     
-    if (updatedRows === 0) {
+    if (!test) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Test data is required' });
+    }
+    
+    // Use raw SQL to avoid Sequelize model validation issues
+    const [updateResult] = await LabTest.sequelize.query(
+      `UPDATE lab_tests SET test_name = ?, test_code = ?, category = ?, price = ?, service_id = ?, updated_at = NOW() WHERE id = ?`,
+      {
+        replacements: [
+          test.test_name,
+          test.test_code ? test.test_code.toUpperCase() : test.test_code,
+          test.category,
+          parseFloat(test.price) || 0,
+          test.service_id || null,
+          req.params.id
+        ],
+        transaction
+      }
+    );
+    
+    if (updateResult.affectedRows === 0) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Lab test not found' });
     }
     
-    // Delete existing components
-    await LabTestComponent.destroy({
-      where: { lab_test_id: req.params.id },
-      transaction,
-    });
-    
-    // Create new components if provided
-    if (components && components.length > 0) {
-      const componentsWithTestId = components.map(component => ({
-        ...component,
-        lab_test_id: req.params.id,
-      }));
-      
-      await LabTestComponent.bulkCreate(componentsWithTestId, { transaction });
+    // Only delete+replace components if we actually have valid ones to insert
+    const validPutComponents = Array.isArray(components)
+      ? components.filter(c => c.component_name && c.component_name.trim() !== '')
+      : [];
+
+    if (validPutComponents.length > 0) {
+      await LabTest.sequelize.query(
+        `DELETE FROM lab_test_components WHERE lab_test_id = ?`,
+        { replacements: [req.params.id], transaction }
+      );
+      for (let i = 0; i < validPutComponents.length; i++) {
+        const component = validPutComponents[i];
+        const componentId = require('crypto').randomUUID();
+        await LabTest.sequelize.query(
+          `INSERT INTO lab_test_components (id, lab_test_id, component_name, unit, reference_range, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          {
+            replacements: [
+              componentId,
+              req.params.id,
+              component.component_name.trim(),
+              component.unit || '',
+              component.reference_range || '',
+              component.sort_order !== undefined ? component.sort_order : i
+            ],
+            transaction
+          }
+        );
+      }
+    } else {
+      console.log('No valid components provided - preserving existing components for test:', req.params.id);
     }
     
     await transaction.commit();
     
-    // Fetch the complete updated lab test
-    const updatedLabTest = await LabTest.findByPk(req.params.id, {
-      include: [{
-        model: LabTestComponent,
-        as: 'components',
-        order: [['sort_order', 'ASC']],
-      }],
-    });
+    // Fetch the complete updated lab test with components
+    const [updatedTests] = await LabTest.sequelize.query(
+      `SELECT * FROM lab_tests WHERE id = ?`,
+      { replacements: [req.params.id] }
+    );
+    const [updatedComponents] = await LabTest.sequelize.query(
+      `SELECT * FROM lab_test_components WHERE lab_test_id = ? ORDER BY sort_order ASC`,
+      { replacements: [req.params.id] }
+    );
     
-    res.json(updatedLabTest);
+    const result = updatedTests[0] ? { ...updatedTests[0], components: updatedComponents } : null;
+    
+    console.log('Lab test updated successfully:', req.params.id);
+    res.json(result);
   } catch (error) {
     await transaction.rollback();
     console.error('Error updating lab test with components:', error);
-    res.status(500).json({ error: 'Failed to update lab test with components' });
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to update lab test with components', details: error.message });
   }
 });
 

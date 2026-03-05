@@ -694,7 +694,7 @@ const Clinical: React.FC = () => {
       // Transform MySQL data to match frontend Patient interface
       const transformedPatients = (patientsData || []).map(patient => ({
         id: patient.id, // This should be the UUID from database
-        patientId: patient.id, // Use the same UUID for both properties
+        patientId: patient.patient_id || patient.id, // Use patient_id field for display, fallback to UUID
         fullName: patient.full_name || patient.fullName,
         first_name: patient.first_name,
         last_name: patient.last_name,

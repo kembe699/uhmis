@@ -122,38 +122,130 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Auto-save component value
-router.post('/:id/auto-save', async (req, res) => {
+// Get saved component values for a lab request
+router.get('/:id/component-values', async (req, res) => {
   try {
     const { id } = req.params;
-    const { componentName, componentValue, remark } = req.body;
+    const [components] = await sequelize.query(
+      `SELECT cv.* FROM lab_result_component_values cv
+       JOIN lab_results lr ON cv.result_id = lr.id
+       WHERE lr.lab_request_id = ?
+       ORDER BY cv.created_at ASC`,
+      { replacements: [id] }
+    );
+    res.json(components);
+  } catch (error) {
+    console.error('Error fetching component values:', error.message);
+    res.status(500).json({ error: 'Failed to fetch component values', details: error.message });
+  }
+});
+
+// Auto-save component value
+router.post('/:id/auto-save', async (req, res) => {
+  const crypto = require('crypto');
+  try {
+    const { id } = req.params;
+    const { componentName, componentValue, remark, unit, normalRange } = req.body;
 
     console.log('Auto-save request:', { id, componentName, componentValue, remark });
 
     // Check if lab request exists
-    const [labRequest] = await sequelize.query(`
-      SELECT * FROM lab_requests WHERE id = ?
-    `, {
-      replacements: [id]
-    });
+    const [[labRequest]] = await sequelize.query(
+      `SELECT * FROM lab_requests WHERE id = ?`,
+      { replacements: [id] }
+    );
 
-    if (labRequest.length === 0) {
+    if (!labRequest) {
       return res.status(404).json({ error: 'Lab request not found' });
     }
 
-    // For now, just return success - we can implement actual storage later
-    console.log('Auto-save successful for:', componentName, componentValue);
-    
-    res.json({ 
-      success: true, 
-      message: 'Component auto-saved successfully',
-      componentName,
-      componentValue,
-      remark
-    });
+    // Find or create a lab_results entry for this lab_request
+    let [[labResult]] = await sequelize.query(
+      `SELECT * FROM lab_results WHERE lab_request_id = ? LIMIT 1`,
+      { replacements: [id] }
+    );
+
+    if (!labResult) {
+      // Resolve actual patient UUID (lab_requests.patient_id may be readable ID like 'UH-989887')
+      const [[patientRow]] = await sequelize.query(
+        `SELECT id FROM patients WHERE id = ? OR patient_id = ? LIMIT 1`,
+        { replacements: [labRequest.patient_id, labRequest.patient_id] }
+      );
+      const patientUUID = patientRow?.id || labRequest.patient_id;
+
+      const resultId = crypto.randomUUID();
+      await sequelize.query(
+        `INSERT INTO lab_results (id, lab_request_id, patient_id, test_code, test_name, status, result_date, clinic_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'partial', NOW(), ?, NOW(), NOW())`,
+        {
+          replacements: [
+            resultId,
+            id,
+            patientUUID,
+            labRequest.test_code || '',
+            labRequest.test_name || '',
+            labRequest.clinic_id || null
+          ]
+        }
+      );
+      [[labResult]] = await sequelize.query(
+        `SELECT * FROM lab_results WHERE id = ?`, { replacements: [resultId] }
+      );
+    }
+
+    // Determine if value is abnormal based on normal_range
+    let isAbnormal = 0;
+    if (normalRange && componentValue && !isNaN(Number(componentValue))) {
+      const rangeMatch = normalRange.match(/^([\d.]+)-([\d.]+)$/);
+      if (rangeMatch) {
+        const val = parseFloat(componentValue);
+        isAbnormal = (val < parseFloat(rangeMatch[1]) || val > parseFloat(rangeMatch[2])) ? 1 : 0;
+      }
+    }
+
+    // Upsert component value — update if exists, insert if not
+    const [[existing]] = await sequelize.query(
+      `SELECT id FROM lab_result_component_values WHERE result_id = ? AND component_name = ?`,
+      { replacements: [labResult.id, componentName] }
+    );
+
+    if (existing) {
+      await sequelize.query(
+        `UPDATE lab_result_component_values SET value = ?, unit = ?, normal_range = ?, is_abnormal = ?, remark = ?, updated_at = NOW() WHERE id = ?`,
+        { replacements: [componentValue, unit || '', normalRange || '', isAbnormal, remark || '', existing.id] }
+      );
+    } else {
+      await sequelize.query(
+        `INSERT INTO lab_result_component_values (id, result_id, component_name, value, unit, normal_range, is_abnormal, remark, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        {
+          replacements: [
+            crypto.randomUUID(),
+            labResult.id,
+            componentName,
+            componentValue,
+            unit || '',
+            normalRange || '',
+            isAbnormal,
+            remark || ''
+          ]
+        }
+      );
+    }
+
+    // Mark lab_request as partial if still pending
+    if (labRequest.status === 'pending') {
+      await sequelize.query(
+        `UPDATE lab_requests SET status = 'partial', updated_at = NOW() WHERE id = ?`,
+        { replacements: [id] }
+      );
+    }
+
+    console.log('Auto-saved component:', componentName, '=', componentValue);
+    res.json({ success: true, message: `${componentName} saved`, componentName, componentValue, remark });
   } catch (error) {
-    console.error('Error auto-saving component:', error);
-    res.status(500).json({ error: 'Failed to auto-save component' });
+    console.error('Error auto-saving component:', error.message);
+    res.status(500).json({ error: 'Failed to auto-save component', details: error.message });
   }
 });
 

@@ -155,15 +155,29 @@ const LabTests: React.FC = () => {
     setSelectedService(test.service_id?.toString() || '');
     setPrice(test.price?.toString() || '');
     
-    // Transform database components to frontend format
+    // Transform database components to frontend format, parsing reference_range into min/max
     const transformedComponents = test.components.length > 0 
-      ? test.components.map(comp => ({
-          name: comp.component_name || comp.name || '',
-          unit: comp.unit || '',
-          normalRangeMin: undefined,
-          normalRangeMax: undefined,
-          normalRangeText: comp.reference_range || comp.normalRangeText || ''
-        }))
+      ? test.components.map(comp => {
+          const refRange = comp.reference_range || comp.normalRangeText || '';
+          // Try to parse "number-number" format (e.g. "12.0-16.0")
+          const numericRangeMatch = refRange.match(/^([\d.]+)-([\d.]+)$/);
+          if (numericRangeMatch) {
+            return {
+              name: comp.component_name || comp.name || '',
+              unit: comp.unit || '',
+              normalRangeMin: parseFloat(numericRangeMatch[1]),
+              normalRangeMax: parseFloat(numericRangeMatch[2]),
+              normalRangeText: ''
+            };
+          }
+          return {
+            name: comp.component_name || comp.name || '',
+            unit: comp.unit || '',
+            normalRangeMin: undefined,
+            normalRangeMax: undefined,
+            normalRangeText: refRange
+          };
+        })
       : [{ name: '', unit: '', normalRangeMin: undefined, normalRangeMax: undefined, normalRangeText: '' }];
     
     setComponents(transformedComponents);

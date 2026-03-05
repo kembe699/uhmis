@@ -17,6 +17,8 @@ import {
   ChevronRight,
   ChevronDown,
   AlertCircle,
+  Unlock,
+  Send,
   Filter,
   Printer,
   X as XIcon,
@@ -85,7 +87,7 @@ const Laboratory: React.FC = () => {
   const [showSendBackDialog, setShowSendBackDialog] = useState(false);
 
   // Auto-save component values to database on blur
-  const autoSaveComponentValue = async (requestId: string, componentName: string, value: string, remark: string) => {
+  const autoSaveComponentValue = async (requestId: string, componentName: string, value: string, remark: string, unit?: string, normalRange?: string) => {
     if (!user?.clinic) {
       console.log('Auto-save skipped: No clinic');
       return;
@@ -109,7 +111,9 @@ const Laboratory: React.FC = () => {
         body: JSON.stringify({
           componentName,
           componentValue: value,
-          remark: remark
+          remark,
+          unit: unit || '',
+          normalRange: normalRange || ''
         }),
       });
 
@@ -132,12 +136,18 @@ const Laboratory: React.FC = () => {
     if (!selectedTestRequest || !component.value.trim()) {
       return;
     }
+
+    const normalRange = component.normalRangeMin && component.normalRangeMax
+      ? `${component.normalRangeMin}-${component.normalRangeMax}`
+      : component.normalRangeText || '';
     
     autoSaveComponentValue(
       selectedTestRequest.id,
       component.name,
       component.value,
-      component.remark
+      component.remark,
+      component.unit,
+      normalRange
     );
   };
 
@@ -170,6 +180,270 @@ const Laboratory: React.FC = () => {
     }
 
     setTestComponents(updatedComponents);
+  };
+
+  // Generate and print lab report for ALL patient tests that have values
+  const handlePrint = async () => {
+    if (!selectedPatientRequests.length && !selectedTestRequest) return;
+
+    const clinicName = user?.clinic || 'Universal Hospital';
+    const printTime = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) +
+      ' ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    // Resolve full patient details — fetch from API if selectedPatient is missing fields
+    let patient: any = selectedPatient;
+    const lookupId = selectedTestRequest?.patient_id || selectedPatientId || '';
+    if (lookupId && (!patient?.gender || !patient?.dateOfBirth)) {
+      try {
+        const pRes = await fetch(`/api/patients/lookup/${encodeURIComponent(lookupId)}`, { credentials: 'include' });
+        if (pRes.ok) patient = await pRes.json();
+      } catch (_) {}
+    }
+
+    const patientName = patient
+      ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || (patient as any).fullName || (patient as any).patientName || ''
+      : (selectedTestRequest?.patient_name || '');
+    const patientId = (patient as any)?.patient_id || (patient as any)?.patientId || selectedTestRequest?.patient_id || '';
+    const gender = patient?.gender ? (patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1)) : '';
+    const phone = (patient as any)?.phone_number || (patient as any)?.phoneNumber || (patient as any)?.phone || '';
+    const town = (patient as any)?.address?.county || (patient as any)?.county || '';
+
+    // Calculate age — handle both camelCase (frontend) and snake_case (DB direct)
+    let ageStr = '';
+    const dobRaw = (patient as any)?.date_of_birth || (patient as any)?.dateOfBirth;
+    if (dobRaw) {
+      const dob = new Date(dobRaw);
+      const now = new Date();
+      let yrs = now.getFullYear() - dob.getFullYear();
+      let mths = now.getMonth() - dob.getMonth();
+      let days = now.getDate() - dob.getDate();
+      if (days < 0) { mths--; days += 30; }
+      if (mths < 0) { yrs--; mths += 12; }
+      ageStr = [yrs > 0 ? `${yrs} Yrs` : '', mths > 0 ? `${mths} Mnths` : '', days > 0 ? `${days} days` : ''].filter(Boolean).join(' ');
+    } else if ((patient as any)?.age) {
+      ageStr = `${(patient as any).age} Yrs`;
+    }
+
+    // Build per-test component data: fetch saved values for each request
+    const requests = selectedPatientRequests.length > 0 ? selectedPatientRequests : (selectedTestRequest ? [selectedTestRequest] : []);
+
+    type CompRow = { name: string; value: string; unit: string; normalRangeMin: string; normalRangeMax: string; normalRangeText: string; remark: string; };
+    const testSectionsData: Array<{ request: typeof requests[0]; components: CompRow[] }> = [];
+
+    for (const req of requests) {
+      let comps: CompRow[] = [];
+
+      if (req.id === selectedTestRequest?.id) {
+        // Use already-loaded in-memory components for the currently selected test
+        comps = testComponents;
+      } else {
+        // Fetch saved values for this request
+        try {
+          const svRes = await fetch(`/api/lab-requests/${req.id}/component-values`, { credentials: 'include' });
+          if (svRes.ok) {
+            const savedVals: any[] = await svRes.json();
+            if (savedVals.length > 0) {
+              // Fetch component definitions to get full names/ranges
+              const testCode = req.test_code || '';
+              const testName = req.test_name || req.testType || '';
+              let defs: any[] = [];
+              for (const lookup of [testCode, testName].filter(Boolean)) {
+                try {
+                  const defRes = await fetch(`/api/lab-tests/code/${encodeURIComponent(lookup)}`, { credentials: 'include' });
+                  if (defRes.ok) {
+                    const labTest = await defRes.json();
+                    if (labTest.components?.length > 0) { defs = labTest.components; break; }
+                  }
+                } catch (_) {}
+              }
+              // Build merged rows
+              const savedMap: Record<string, any> = {};
+              savedVals.forEach(sv => { savedMap[sv.component_name] = sv; });
+              if (defs.length > 0) {
+                comps = defs.map((d: any) => {
+                  const sv = savedMap[d.component_name || d.name] || {};
+                  const refRange = d.reference_range || '';
+                  const numMatch = refRange.match(/^([\d.]+)-([\d.]+)$/);
+                  return {
+                    name: d.component_name || d.name || '',
+                    value: sv.value || '',
+                    unit: sv.unit || d.unit || '',
+                    normalRangeMin: numMatch ? numMatch[1] : '',
+                    normalRangeMax: numMatch ? numMatch[2] : '',
+                    normalRangeText: refRange,
+                    remark: sv.remark || ''
+                  };
+                });
+              } else {
+                // No definitions - use saved values directly
+                comps = savedVals.map(sv => ({
+                  name: sv.component_name,
+                  value: sv.value || '',
+                  unit: sv.unit || '',
+                  normalRangeMin: '',
+                  normalRangeMax: '',
+                  normalRangeText: sv.normal_range || '',
+                  remark: sv.remark || ''
+                }));
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Only include this test if at least one component has a value
+      if (comps.some(c => c.value && c.value.trim() !== '')) {
+        testSectionsData.push({ request: req, components: comps });
+      }
+    }
+
+    if (testSectionsData.length === 0) {
+      toast.error('No test results with values found to print');
+      return;
+    }
+
+    // Build test section HTML blocks
+    const buildTestSection = (req: typeof requests[0], comps: CompRow[]) => {
+      const testCode = req.test_code || '';
+      const testFullName = req.test_name || req.testType || '';
+      const rows = comps.map(comp => `
+        <tr>
+          <td style="padding:4px 8px;color:#1a6b9a;font-size:12px;">${comp.name}</td>
+          <td style="padding:4px 8px;font-size:12px;">${comp.value || ''}</td>
+          <td style="padding:4px 8px;font-size:12px;">${comp.normalRangeMin || ''}</td>
+          <td style="padding:4px 8px;font-size:12px;">${comp.normalRangeMax || ''}</td>
+          <td style="padding:4px 8px;font-size:12px;">${comp.unit || ''}</td>
+          <td style="padding:4px 8px;font-size:12px;">${comp.remark || '-'}</td>
+        </tr>`).join('');
+      const refRanges = comps
+        .filter(c => c.normalRangeMin || c.normalRangeMax || c.normalRangeText)
+        .map(c => {
+          const range = c.normalRangeMin && c.normalRangeMax
+            ? `${c.normalRangeMin} - ${c.normalRangeMax} ${c.unit}`.trim()
+            : c.normalRangeText;
+          return `<span style="font-size:11px;margin-right:16px;"><b>${c.name}:</b> ${range}</span>`;
+        }).join('');
+      return `
+  <div class="test-section">
+    <div class="test-header">
+      <span>Test: ${testFullName}${testCode ? ` ( ${testCode} )` : ''}</span>
+      <span class="specimen">Specimen: <i>${testCode || 'N/A'}</i></span>
+    </div>
+    <div class="history-row">History:</div>
+    <div class="results-header">Test Results</div>
+    <table class="results-table">
+      <thead><tr>
+        <td>Component</td><td>Value</td><td>Lower</td><td>Upper</td><td>Units</td><td>Remark</td>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="ref-ranges"><b>Reference Ranges:</b> ${refRanges}</div>
+  </div>`;
+    };
+
+    const allTestSections = testSectionsData.map(({ request: req, components: comps }) => buildTestSection(req, comps)).join('\n');
+    const firstReq = testSectionsData[0].request;
+    const reqDate = new Date(firstReq.requested_at || firstReq.requestedAt || Date.now());
+    const reportDate = reqDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) +
+      ' ' + reqDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Laboratory Report</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family: Arial, sans-serif; }
+    body { background:#fff; padding:20px; color:#222; }
+    @media print { body { padding:0; } @page { margin:15mm; } }
+    .page { max-width:780px; margin:0 auto; border:1px solid #ccc; }
+    .report-title { background:#6bb8d4; text-align:center; padding:8px; font-size:16px; font-weight:bold; color:#000; }
+    .header-row { display:flex; border-bottom:1px solid #ccc; }
+    .clinic-box { flex:1; padding:12px 16px; border-right:1px solid #ccc; }
+    .clinic-logo-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .logo-placeholder { width:48px; height:48px; background:#6bb8d4; border-radius:4px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:bold; }
+    .clinic-name { font-weight:bold; font-size:13px; }
+    .clinic-field { font-size:11px; margin-top:3px; }
+    .clinic-field span { font-weight:bold; margin-right:4px; }
+    .patient-box { width:300px; padding:12px 16px; }
+    .patient-field { display:flex; font-size:11px; margin-bottom:4px; }
+    .patient-label { font-weight:bold; min-width:110px; color:#000; }
+    .patient-value { color:#1a6b9a; }
+    .report-date { padding:6px 12px; font-size:11px; border-bottom:1px solid #ccc; }
+    .report-date b { margin-right:4px; }
+    .request-no { background:#d4a574; padding:6px 12px; font-size:12px; font-weight:bold; border-bottom:1px solid #ccc; }
+    .test-section { border:1px solid #aaa; margin:10px; border-radius:2px; page-break-inside:avoid; }
+    .test-header { background:#6bb8d4; padding:6px 10px; display:flex; justify-content:space-between; font-size:12px; font-weight:bold; }
+    .test-header .specimen { font-style:italic; font-weight:normal; }
+    .history-row { padding:6px 10px; font-size:11px; border-bottom:1px solid #eee; }
+    .results-header { background:#e8c49a; padding:5px 10px; font-size:12px; font-weight:bold; border-top:1px solid #ccc; border-bottom:1px solid #ccc; }
+    .results-table { width:100%; border-collapse:collapse; }
+    .results-table thead tr { border-bottom:1px solid #ccc; }
+    .results-table thead td { padding:5px 8px; font-size:12px; font-weight:bold; color:#000; }
+    .results-table tbody tr { border-bottom:1px solid #f0f0f0; }
+    .ref-ranges { padding:6px 10px; font-size:11px; border-top:1px solid #eee; }
+    .ref-ranges b { margin-right:4px; }
+    .signatures { display:flex; justify-content:space-around; padding:30px 40px 10px; margin-top:10px; }
+    .sig-block { text-align:center; min-width:200px; }
+    .sig-line { border-top:1px solid #333; margin-bottom:6px; }
+    .sig-label { font-size:12px; font-weight:bold; color:#000; }
+    .sig-name { font-size:11px; color:#555; margin-top:2px; }
+    .footer { padding:10px; font-size:10px; color:#888; text-align:center; margin-top:4px; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="report-title">Laboratory Report</div>
+  <div class="header-row">
+    <div class="clinic-box">
+      <div class="clinic-logo-row">
+        <div class="logo-placeholder">LOGO</div>
+        <div>
+          <div class="clinic-name">${clinicName}</div>
+        </div>
+      </div>
+      <div class="clinic-field"><span>Branch:</span>${clinicName}</div>
+      <div class="clinic-field"><span>Address:</span></div>
+      <div class="clinic-field"><span>Telephone:</span></div>
+      <div class="clinic-field"><span>Email:</span></div>
+    </div>
+    <div class="patient-box">
+      <div class="patient-field"><span class="patient-label">Patient Name:</span><span class="patient-value">${patientName}</span></div>
+      <div class="patient-field"><span class="patient-label">OutPatient No:</span><span class="patient-value">${patientId}</span></div>
+      <div class="patient-field"><span class="patient-label">Reference No:</span><span class="patient-value"></span></div>
+      <div class="patient-field"><span class="patient-label">Sex:</span><span class="patient-value">${gender}</span></div>
+      <div class="patient-field"><span class="patient-label">Age:</span><span class="patient-value">${ageStr}</span></div>
+      <div class="patient-field"><span class="patient-label">Telephone:</span><span class="patient-value">${phone}</span></div>
+      <div class="patient-field"><span class="patient-label">ID No:</span><span class="patient-value"></span></div>
+      <div class="patient-field"><span class="patient-label">Town:</span><span class="patient-value">${town}</span></div>
+    </div>
+  </div>
+  <div class="report-date"><b>Report Date:</b> ${reportDate}</div>
+  <div class="request-no">Request No:&nbsp;&nbsp;&nbsp;${firstReq.id?.slice(-6).toUpperCase() || ''}</div>
+  ${allTestSections}
+  <div class="signatures">
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-label">Requested By</div>
+      <div class="sig-name">${firstReq.requested_by || ''}</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-label">Done By</div>
+      <div class="sig-name">${user?.displayName || ''}</div>
+    </div>
+  </div>
+  <div class="footer">Printed on ${printTime} &nbsp;|&nbsp; ${clinicName}</div>
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   };
 
   // Load data on component mount
@@ -235,33 +509,58 @@ const Laboratory: React.FC = () => {
     }
   };
 
-  const loadTestComponents = async (testName: string) => {
+  const loadTestComponents = async (testName: string, testCode?: string, requestId?: string) => {
     try {
-      console.log('Loading components for test:', testName);
+      console.log('Loading components for test:', testName, 'code:', testCode, 'requestId:', requestId);
+
+      // Fetch previously saved values for this request (if any)
+      let savedValuesMap: Record<string, { value: string; remark: string }> = {};
+      if (requestId) {
+        try {
+          const savedRes = await fetch(`/api/lab-requests/${requestId}/component-values`, { credentials: 'include' });
+          if (savedRes.ok) {
+            const savedValues: any[] = await savedRes.json();
+            savedValues.forEach(sv => {
+              savedValuesMap[sv.component_name] = { value: sv.value || '', remark: sv.remark || '' };
+            });
+            console.log('Loaded saved component values:', savedValuesMap);
+          }
+        } catch (e) {
+          console.warn('Could not load saved component values:', e);
+        }
+      }
       
-      // First try to fetch components from database
-      const response = await fetch(`/api/lab-tests/code/${encodeURIComponent(testName)}`, {
-        credentials: 'include'
-      });
+      // Try by test_code first, then test_name as fallback
+      const lookups = [testCode, testName].filter(Boolean);
       
-      if (response.ok) {
-        const labTest = await response.json();
-        console.log('Fetched lab test with components:', labTest);
+      for (const lookup of lookups) {
+        const response = await fetch(`/api/lab-tests/code/${encodeURIComponent(lookup!)}`, {
+          credentials: 'include'
+        });
         
-        if (labTest.components && labTest.components.length > 0) {
-          const dbComponents = labTest.components.map((comp: any) => ({
-            name: comp.component_name || comp.name,
-            value: '',
-            unit: comp.unit || '',
-            normalRangeMin: '',
-            normalRangeMax: '',
-            normalRangeText: comp.reference_range || comp.normalRangeText || '',
-            remark: ''
-          }));
+        if (response.ok) {
+          const labTest = await response.json();
+          console.log('Fetched lab test with components:', labTest);
           
-          console.log('Setting database components:', dbComponents);
-          setTestComponents(dbComponents);
-          return;
+          if (labTest.components && labTest.components.length > 0) {
+            const dbComponents = labTest.components.map((comp: any) => {
+              const compName = comp.component_name || comp.name;
+              const saved = savedValuesMap[compName];
+              return {
+                name: compName,
+                value: saved?.value || '',
+                unit: comp.unit || '',
+                normalRangeMin: comp.reference_range ? comp.reference_range.split('-')[0]?.trim() : '',
+                normalRangeMax: comp.reference_range ? comp.reference_range.split('-')[1]?.trim() : '',
+                normalRangeText: comp.reference_range || comp.normalRangeText || '',
+                remark: saved?.remark || ''
+              };
+            });
+            
+            console.log('Setting database components from lookup:', lookup, dbComponents);
+            setTestComponents(dbComponents);
+            return;
+          }
         }
       }
       
@@ -305,9 +604,15 @@ const Laboratory: React.FC = () => {
         ]
       };
       
-      const components = testComponentsMap[testName] || [
+      const rawComponents = testComponentsMap[testName] || [
         { name: 'Result', value: '', unit: '', normalRangeMin: '', normalRangeMax: '', normalRangeText: '', remark: '' }
       ];
+
+      // Merge saved values into fallback components
+      const components = rawComponents.map(comp => {
+        const saved = savedValuesMap[comp.name];
+        return saved ? { ...comp, value: saved.value, remark: saved.remark } : comp;
+      });
       
       console.log('Setting fallback components:', components);
       setTestComponents(components);
@@ -659,7 +964,23 @@ const Laboratory: React.FC = () => {
         {/* Requested Tests and Results Section */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">Requested Tests and Results</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Requested Tests and Results</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={!selectedTestRequest} onClick={handlePrint}>
+                  <Printer className="w-4 h-4" />
+                  Print
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={!selectedTestRequest}>
+                  <Unlock className="w-4 h-4" />
+                  Unlock
+                </Button>
+                <Button variant="default" size="sm" className="gap-1.5" disabled={!selectedTestRequest}>
+                  <Send className="w-4 h-4" />
+                  Send
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -723,8 +1044,8 @@ const Laboratory: React.FC = () => {
                                   }`}
                                   onClick={() => {
                                     setSelectedTestRequest(request);
-                                    setTestName(request.test_name || request.testType);
-                                    loadTestComponents(request.test_name || request.testType);
+                                    setTestName(request.test_name || request.testType || '');
+                                    loadTestComponents(request.test_name || request.testType || '', request.test_code || '', request.id);
                                   }}
                                 >
                                   <td className="p-3 pl-6">
@@ -778,7 +1099,17 @@ const Laboratory: React.FC = () => {
                 
                 {/* Component Results Table */}
                 <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
+                  {/* Shared column widths via colgroup on both tables */}
+                  <table className="w-full text-sm table-fixed">
+                    <colgroup>
+                      <col style={{width:'22%'}} />
+                      <col style={{width:'10%'}} />
+                      <col style={{width:'10%'}} />
+                      <col style={{width:'10%'}} />
+                      <col style={{width:'20%'}} />
+                      <col style={{width:'22%'}} />
+                      <col style={{width:'6%'}} />
+                    </colgroup>
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="text-left p-3 font-medium">Component</th>
@@ -787,43 +1118,59 @@ const Laboratory: React.FC = () => {
                         <th className="text-left p-3 font-medium">Units</th>
                         <th className="text-left p-3 font-medium">Value</th>
                         <th className="text-left p-3 font-medium">Result</th>
-                        <th className="text-left p-3 font-medium">Clear</th>
+                        <th className="p-3"></th>
                       </tr>
                     </thead>
                   </table>
                   <div className="h-[300px] overflow-y-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col style={{width:'22%'}} />
+                        <col style={{width:'10%'}} />
+                        <col style={{width:'10%'}} />
+                        <col style={{width:'10%'}} />
+                        <col style={{width:'20%'}} />
+                        <col style={{width:'22%'}} />
+                        <col style={{width:'6%'}} />
+                      </colgroup>
                       <tbody>
                         {testComponents.length > 0 ? (
                           testComponents.map((component, index) => (
                             <tr key={index} className="border-t">
-                              <td className="p-3 font-medium w-[20%]">{component.name}</td>
-                              <td className="p-3 w-[12%]">{component.normalRangeMin || ''}</td>
-                              <td className="p-3 w-[12%]">{component.normalRangeMax || ''}</td>
-                              <td className="p-3 w-[12%]">{component.unit}</td>
-                              <td className="p-3 w-[16%]">
+                              <td className="p-3 font-medium truncate">{component.name}</td>
+                              <td className="p-3">{component.normalRangeMin || ''}</td>
+                              <td className="p-3">{component.normalRangeMax || ''}</td>
+                              <td className="p-3">{component.unit}</td>
+                              <td className="p-3">
                                 <Input
                                   value={component.value}
                                   onChange={(e) => updateComponentValue(index, 'value', e.target.value)}
                                   onBlur={() => handleComponentBlur(index)}
-                                  className="h-8 w-20"
+                                  className="h-8 w-full max-w-[90px]"
                                 />
                               </td>
-                              <td className="p-3 w-[16%]">
-                                <Select>
-                                  <SelectTrigger className="h-8 w-24">
+                              <td className="p-3">
+                                <Select
+                                  value={component.remark || ''}
+                                  onValueChange={(val) => updateComponentValue(index, 'remark', val)}
+                                >
+                                  <SelectTrigger className={`h-8 w-full ${
+                                    component.remark === 'High' ? 'border-red-400 text-red-600' :
+                                    component.remark === 'Low'  ? 'border-blue-400 text-blue-600' :
+                                    component.remark === 'Normal' ? 'border-green-400 text-green-600' : ''
+                                  }`}>
                                     <SelectValue placeholder="Result" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="normal">Normal</SelectItem>
-                                    <SelectItem value="high">High</SelectItem>
-                                    <SelectItem value="low">Low</SelectItem>
+                                    <SelectItem value="Normal">Normal</SelectItem>
+                                    <SelectItem value="High">High</SelectItem>
+                                    <SelectItem value="Low">Low</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </td>
-                              <td className="p-3 w-[12%]">
-                                <Button variant="outline" size="sm" className="h-8">
-                                  Clear
+                              <td className="p-3">
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => updateComponentValue(index, 'value', '')}>
+                                  <XIcon className="w-4 h-4 text-muted-foreground" />
                                 </Button>
                               </td>
                             </tr>
@@ -859,8 +1206,8 @@ const Laboratory: React.FC = () => {
         {/* Test Requests Section */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">View: Test Requests</CardTitle>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">View: Test Requests</CardTitle>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
@@ -874,56 +1221,72 @@ const Laboratory: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="border rounded-lg overflow-hidden">
+              <div className="max-h-[200px] overflow-y-auto">
               <table className="w-full text-sm table-fixed">
-                <thead className="bg-muted/50 block w-full">
-                  <tr className="table-row">
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
+                <colgroup>
+                  <col style={{width:'20%'}} />
+                  <col style={{width:'20%'}} />
+                  <col style={{width:'35%'}} />
+                  <col style={{width:'25%'}} />
+                </colgroup>
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr>
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
                       Request No <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
                       Visit Id <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
                       Name <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
-                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70 w-1/4">
+                    <th className="text-left p-3 font-medium cursor-pointer hover:bg-muted/70">
                       Requested On <ChevronUp className="inline w-3 h-3 ml-1" />
                     </th>
                   </tr>
                 </thead>
-                <tbody className="block max-h-[200px] overflow-y-auto">
-                  {filteredRequests.length > 0 ? (
-                    filteredRequests.map((request, index) => (
-                      <tr 
-                        key={request.id} 
-                        className={`table-row border-t cursor-pointer hover:bg-muted/30 ${
-                          selectedTestRequest?.id === request.id ? 'bg-primary/10' : ''
-                        }`}
-                        onClick={() => {
-                          setSelectedTestRequest(request);
-                          setTestName(request.test_name || request.testType);
-                          // Also select the patient
-                          const patientId = request.patient_id || request.patientId;
-                          const patientName = request.patient_name || request.patientName;
-                          if (patientId && patientName) {
-                            handlePatientSelect(patientId, patientName);
-                          }
-                        }}
-                      >
-                        <td className="p-3 w-1/4">{request.id}</td>
-                        <td className="p-3 w-1/4">{request.visit_id || request.visitId}</td>
-                        <td className="p-3 w-1/4">{request.patient_name || request.patientName}</td>
-                        <td className="p-3 w-1/4">{new Date(request.requested_at || request.requestedAt).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric', 
-                          year: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })}</td>
-                      </tr>
-                    ))
-                  ) : (
+                <tbody>
+                  {filteredRequests.length > 0 ? (() => {
+                    // Group by patient — one row per patient
+                    const byPatient = Array.from(
+                      filteredRequests.reduce((map, req) => {
+                        const pid = req.patient_id || req.patientId || '';
+                        if (!map.has(pid)) map.set(pid, { patientId: pid, patientName: req.patient_name || req.patientName || '', requests: [] });
+                        map.get(pid)!.requests.push(req);
+                        return map;
+                      }, new Map<string, { patientId: string; patientName: string; requests: LabRequest[] }>())
+                      .values()
+                    );
+                    return byPatient.map((group, index) => {
+                      const latest = group.requests.sort((a, b) =>
+                        new Date(b.requested_at || b.requestedAt).getTime() - new Date(a.requested_at || a.requestedAt).getTime()
+                      )[0];
+                      return (
+                        <tr
+                          key={group.patientId}
+                          className={`table-row border-t cursor-pointer hover:bg-muted/30 ${
+                            selectedPatientId === group.patientId ? 'bg-primary/10' : ''
+                          }`}
+                          onClick={() => handlePatientSelect(group.patientId, group.patientName)}
+                        >
+                          <td className="p-3 w-1/4 font-mono text-xs">{latest.id.slice(-8).toUpperCase()}</td>
+                          <td className="p-3 w-1/4">{latest.visit_id || latest.visitId || '-'}</td>
+                          <td className="p-3 w-1/4">
+                            {group.patientName}
+                            <span className="ml-1 text-xs text-muted-foreground">({group.requests.length} test{group.requests.length !== 1 ? 's' : ''})</span>
+                          </td>
+                          <td className="p-3 w-1/4">{new Date(latest.requested_at || latest.requestedAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })}</td>
+                        </tr>
+                      );
+                    });
+                  })() : (
                     <tr>
                       <td colSpan={4} className="h-[150px] text-center text-muted-foreground align-middle">
                         <div className="flex items-center justify-center h-full">
@@ -934,6 +1297,7 @@ const Laboratory: React.FC = () => {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
             
             <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">

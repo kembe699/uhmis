@@ -16,6 +16,26 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Lookup patient by readable patient_id (e.g. UH-989887) or UUID
+router.get('/lookup/:patientId', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const patient = await Patient.findOne({
+      where: {
+        [Op.or]: [
+          { patient_id: patientId },
+          { id: patientId }
+        ]
+      }
+    });
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    res.json(patient);
+  } catch (error) {
+    console.error('Error looking up patient:', error);
+    res.status(500).json({ error: 'Failed to lookup patient' });
+  }
+});
+
 // Get patient by ID
 router.get('/:id', async (req, res) => {
   try {
