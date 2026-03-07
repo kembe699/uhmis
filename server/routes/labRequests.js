@@ -249,6 +249,90 @@ router.post('/:id/auto-save', async (req, res) => {
   }
 });
 
+// Submit lab results and lock the request
+router.post('/:id/results', async (req, res) => {
+  const crypto = require('crypto');
+  try {
+    const { id } = req.params;
+    const { components, resultText, performedBy, status = 'completed' } = req.body;
+
+    // Verify the lab request exists
+    const [[labRequest]] = await sequelize.query(
+      `SELECT * FROM lab_requests WHERE id = ?`, { replacements: [id] }
+    );
+    if (!labRequest) return res.status(404).json({ error: 'Lab request not found' });
+
+    // Find or create a lab_results entry for this request (same as auto-save)
+    let [[labResult]] = await sequelize.query(
+      `SELECT * FROM lab_results WHERE lab_request_id = ? LIMIT 1`, { replacements: [id] }
+    );
+    if (!labResult) {
+      const [[patientRow]] = await sequelize.query(
+        `SELECT id FROM patients WHERE id = ? OR patient_id = ? LIMIT 1`,
+        { replacements: [labRequest.patient_id, labRequest.patient_id] }
+      );
+      const patientUUID = patientRow?.id || labRequest.patient_id;
+      const resultId = crypto.randomUUID();
+      await sequelize.query(
+        `INSERT INTO lab_results (id, lab_request_id, patient_id, test_code, test_name, status, result_date, clinic_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), NOW())`,
+        { replacements: [resultId, id, patientUUID, labRequest.test_code || '', labRequest.test_name || '', status, labRequest.clinic_id || null] }
+      );
+      [[labResult]] = await sequelize.query(`SELECT * FROM lab_results WHERE id = ?`, { replacements: [resultId] });
+    } else {
+      // Update existing result status
+      await sequelize.query(
+        `UPDATE lab_results SET status = ?, updated_at = NOW() WHERE id = ?`,
+        { replacements: [status, labResult.id] }
+      );
+    }
+
+    // Upsert each component value via result_id
+    if (Array.isArray(components)) {
+      for (const comp of components) {
+        if (!comp.name || comp.value === undefined || comp.value === null || !comp.value.toString().trim()) continue;
+        let isAbnormal = 0;
+        const refRange = comp.normalRangeText || (comp.normalRangeMin != null && comp.normalRangeMax != null ? `${comp.normalRangeMin}-${comp.normalRangeMax}` : '');
+        if (refRange && !isNaN(Number(comp.value))) {
+          const m = refRange.match(/^([\d.]+)-([\d.]+)$/);
+          if (m) {
+            const val = parseFloat(comp.value);
+            isAbnormal = (val < parseFloat(m[1]) || val > parseFloat(m[2])) ? 1 : 0;
+          }
+        }
+        const [[existing]] = await sequelize.query(
+          `SELECT id FROM lab_result_component_values WHERE result_id = ? AND component_name = ?`,
+          { replacements: [labResult.id, comp.name] }
+        );
+        if (existing) {
+          await sequelize.query(
+            `UPDATE lab_result_component_values SET value = ?, unit = ?, normal_range = ?, is_abnormal = ?, remark = ?, updated_at = NOW() WHERE id = ?`,
+            { replacements: [comp.value, comp.unit || '', refRange, isAbnormal, comp.remark || '', existing.id] }
+          );
+        } else {
+          await sequelize.query(
+            `INSERT INTO lab_result_component_values (id, result_id, component_name, value, unit, normal_range, is_abnormal, remark, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            { replacements: [crypto.randomUUID(), labResult.id, comp.name, comp.value, comp.unit || '', refRange, isAbnormal, comp.remark || ''] }
+          );
+        }
+      }
+    }
+
+    // Lock the lab_request (completed_by has FK to users.id — only update status/timestamp)
+    await sequelize.query(
+      `UPDATE lab_requests SET status = ?, completed_at = NOW(), updated_at = NOW() WHERE id = ?`,
+      { replacements: [status, id] }
+    );
+
+    const [[updated]] = await sequelize.query(`SELECT * FROM lab_requests WHERE id = ?`, { replacements: [id] });
+    res.json(updated);
+  } catch (error) {
+    console.error('Error saving lab results:', error.message);
+    res.status(500).json({ error: 'Failed to save lab results', details: error.message });
+  }
+});
+
 // Update lab request status
 router.put('/:id/status', async (req, res) => {
   try {

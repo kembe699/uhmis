@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext.mysql.pure';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LabRequest, LabResult, Patient, LabTest } from '@/types';
@@ -315,14 +315,6 @@ const Laboratory: React.FC = () => {
           <td style="padding:4px 8px;font-size:12px;">${comp.unit || ''}</td>
           <td style="padding:4px 8px;font-size:12px;">${comp.remark || '-'}</td>
         </tr>`).join('');
-      const refRanges = comps
-        .filter(c => c.normalRangeMin || c.normalRangeMax || c.normalRangeText)
-        .map(c => {
-          const range = c.normalRangeMin && c.normalRangeMax
-            ? `${c.normalRangeMin} - ${c.normalRangeMax} ${c.unit}`.trim()
-            : c.normalRangeText;
-          return `<span style="font-size:11px;margin-right:16px;"><b>${c.name}:</b> ${range}</span>`;
-        }).join('');
       return `
   <div class="test-section">
     <div class="test-header">
@@ -337,7 +329,6 @@ const Laboratory: React.FC = () => {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="ref-ranges"><b>Reference Ranges:</b> ${refRanges}</div>
   </div>`;
     };
 
@@ -719,16 +710,12 @@ const Laboratory: React.FC = () => {
         throw new Error(error.message || 'Failed to save results');
       }
 
-      toast.success('Lab results saved successfully');
+      toast.success('Lab report submitted and locked');
       
-      // Refresh data
+      // Refresh data and keep selection — update local status to completed
       await loadLabRequests();
       await loadLabResults();
-      
-      // Clear selection
-      setSelectedTestRequest(null);
-      setTestComponents([]);
-      setResultText('');
+      setSelectedTestRequest(prev => prev ? { ...prev, status: 'completed' } : prev);
       
     } catch (error) {
       console.error('Error saving results:', error);
@@ -738,8 +725,26 @@ const Laboratory: React.FC = () => {
     }
   };
 
+  const handleUnlock = async () => {
+    if (!selectedTestRequest) return;
+    try {
+      const res = await fetch(`/api/lab-requests/${selectedTestRequest.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'partial' }),
+      });
+      if (!res.ok) throw new Error('Failed to unlock');
+      toast.success('Test unlocked — results are now editable');
+      await loadLabRequests();
+      setSelectedTestRequest(prev => prev ? { ...prev, status: 'partial' } : prev);
+    } catch (err) {
+      toast.error('Failed to unlock test');
+    }
+  };
+
   // Handle saving partial results with normal values
-  const handleSavePartialResult = async () => {
+  const handleSavePartialResult = useCallback(async () => {
     if (!selectedTestRequest || !user) return;
     
     setSaving(true);
@@ -800,7 +805,7 @@ const Laboratory: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [selectedTestRequest, user, testComponents, resultText]);
 
   // Register handleSavePartialResult with the global service
   useEffect(() => {
@@ -863,12 +868,12 @@ const Laboratory: React.FC = () => {
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
-                  <div><span className="font-medium">OPD No:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.patient_id || selectedPatient?.patient_id || selectedPatient?.patientId || ''}</div>
-                  <div><span className="font-medium">Surname:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.last_name || selectedPatient?.last_name || selectedPatient?.fullName?.split(' ')[0] || ''}</div>
-                  <div><span className="font-medium">Othernames:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.first_name || selectedPatient?.first_name || selectedPatient?.fullName?.split(' ').slice(1).join(' ') || ''}</div>
-                  <div><span className="font-medium">Age:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.age || selectedPatient?.age || ''}</div>
-                  <div><span className="font-medium">Sex:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.gender || selectedPatient?.gender || selectedPatient?.sex || ''}</div>
-                  <div><span className="font-medium">Residence:</span> {selectedPatient?.village || selectedPatient?.address?.village || 'N/A'}</div>
+                  <div><span className="font-medium">OPD No:</span> {filteredRequests.find(r => r.patient_id === selectedPatientId)?.patient_id || selectedPatient?.patientId || ''}</div>
+                  <div><span className="font-medium">Surname:</span> {selectedPatient?.last_name || selectedPatient?.fullName?.split(' ')[0] || ''}</div>
+                  <div><span className="font-medium">Othernames:</span> {selectedPatient?.first_name || selectedPatient?.fullName?.split(' ').slice(1).join(' ') || ''}</div>
+                  <div><span className="font-medium">Age:</span> {selectedPatient?.age || ''}</div>
+                  <div><span className="font-medium">Sex:</span> {selectedPatient?.gender || ''}</div>
+                  <div><span className="font-medium">Residence:</span> {selectedPatient?.address?.village || 'N/A'}</div>
                   <div><span className="font-medium">Occupation:</span> {selectedPatient?.occupation || 'N/A'}</div>
                 </div>
                 <div className="space-y-2">
@@ -971,7 +976,7 @@ const Laboratory: React.FC = () => {
                   <Printer className="w-4 h-4" />
                   Print
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" disabled={!selectedTestRequest}>
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={!selectedTestRequest || selectedTestRequest?.status !== 'completed'} onClick={handleUnlock}>
                   <Unlock className="w-4 h-4" />
                   Unlock
                 </Button>
@@ -1194,8 +1199,12 @@ const Laboratory: React.FC = () => {
                     <input type="checkbox" id="partiallyDone" className="rounded" />
                     <label htmlFor="partiallyDone" className="text-sm">Is Partially Done</label>
                   </div>
-                  <Button className="bg-green-500 hover:bg-green-600 text-white">
-                    Submit Lab Report
+                  <Button
+                    className="bg-green-500 hover:bg-green-600 text-white"
+                    onClick={handleSaveResults}
+                    disabled={saving || selectedTestRequest?.status === 'completed'}
+                  >
+                    {selectedTestRequest?.status === 'completed' ? '🔒 Report Locked' : saving ? 'Saving...' : 'Submit Lab Report'}
                   </Button>
                 </div>
               </div>

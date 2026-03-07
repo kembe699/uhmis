@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext.mysql.pure';
-import { Plus, Trash2, Edit, TestTube, X, Database, Search, Download, Upload, FileText, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Trash2, Edit, TestTube, X, Database, Search, Download, Upload, FileText, Check, ChevronsUpDown, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabTest, LabTestComponent } from '@/types';
 
@@ -41,6 +41,8 @@ const LabTests: React.FC = () => {
   const [price, setPrice] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [serviceComboOpen, setServiceComboOpen] = useState(false);
+  const dragIndex = React.useRef<number | null>(null);
+
   const [components, setComponents] = useState<LabTestComponent[]>([
     { name: '', unit: '', normalRangeMin: undefined, normalRangeMax: undefined, normalRangeText: '' }
   ]);
@@ -563,15 +565,35 @@ const LabTests: React.FC = () => {
 
                   <div className="space-y-3">
                     {components.map((component, index) => (
-                      <Card key={index} className="p-4">
+                      <Card
+                        key={index}
+                        className="p-4 cursor-grab active:cursor-grabbing"
+                        draggable
+                        onDragStart={() => { dragIndex.current = index; }}
+                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const from = dragIndex.current;
+                          if (from === null || from === index) return;
+                          const reordered = [...components];
+                          const [moved] = reordered.splice(from, 1);
+                          reordered.splice(index, 0, moved);
+                          setComponents(reordered);
+                          dragIndex.current = null;
+                        }}
+                        style={{ opacity: dragIndex.current === index ? 0.5 : 1 }}
+                      >
                         <div className="grid grid-cols-6 gap-3 items-end">
                           <div className="col-span-2 space-y-1">
                             <Label className="text-xs">Component Name *</Label>
+                            <div className="flex items-center gap-1">
+                            <GripVertical className="w-4 h-4 text-muted-foreground shrink-0 cursor-grab" />
                             <Input
                               value={component.name}
                               onChange={(e) => updateComponent(index, 'name', e.target.value)}
                               placeholder="e.g., Hemoglobin"
                             />
+                            </div>
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs">Unit</Label>

@@ -424,17 +424,10 @@ const initializeDatabase = async () => {
       console.log('Note: Could not ensure lab_tests table structure:', error.message);
     }
 
-    // Clean up and recreate lab_test_components table with proper structure
+    // Ensure lab_test_components table exists with the correct structure (never drop it)
     try {
-      console.log('Cleaning up lab_test_components table...');
-      
-      // Drop the table if it exists to clean up duplicate columns
-      await sequelize.query("DROP TABLE IF EXISTS lab_test_components");
-      console.log('Dropped existing lab_test_components table');
-      
-      // Create the table with the correct structure
       await sequelize.query(`
-        CREATE TABLE lab_test_components (
+        CREATE TABLE IF NOT EXISTS lab_test_components (
           id VARCHAR(36) PRIMARY KEY,
           lab_test_id VARCHAR(36) NOT NULL,
           component_name VARCHAR(255) NOT NULL,
@@ -446,9 +439,9 @@ const initializeDatabase = async () => {
           INDEX idx_lab_test_id (lab_test_id)
         )
       `);
-      console.log('Created clean lab_test_components table with correct structure');
+      console.log('lab_test_components table ensured (CREATE IF NOT EXISTS)');
     } catch (error) {
-      console.log('Note: Could not recreate lab_test_components table:', error.message);
+      console.log('Note: Could not ensure lab_test_components table:', error.message);
     }
     // Ensure patient_bills table exists and remove foreign key constraints
     try {
