@@ -1,6 +1,11 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set');
+  process.exit(1);
+}
 
 // Middleware to verify JWT token and extract user info
 const authenticateToken = (req, res, next) => {
@@ -8,16 +13,12 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (!token) {
-    // If no token, set default user (for backward compatibility)
-    req.user = { id: 1, role: 'admin' };
-    return next();
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) {
-      // If token is invalid, set default user
-      req.user = { id: 1, role: 'admin' };
-      return next();
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
     // Set user info from token

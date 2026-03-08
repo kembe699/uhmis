@@ -4,8 +4,13 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const router = express.Router();
 
-// JWT secret - in production, use environment variable
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// JWT secret - MUST be set in environment
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set');
+  process.exit(1);
+}
 
 // Login endpoint
 router.post('/login', async (req, res) => {

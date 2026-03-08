@@ -15,24 +15,29 @@ class BaseApiClient<T> {
 
   // Generic API call wrapper
   protected async fetchApi(path: string = "", options: RequestInit = {}): Promise<any> {
+    const url = `/api/${this.endpoint}${path}`;
+    
+    const defaultOptions: RequestInit = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      credentials: 'include',
+      ...options,
+    };
+
     try {
-      // For development, we'll mock API responses
-      // In production, this would call your actual API
-      console.log(`API ${options.method || 'GET'} request to ${this.endpoint}${path}`);
+      const response = await fetch(url, defaultOptions);
       
-      // Simple mock implementation - in a real app, this would be an actual API call
-      return this.getMockData(path, options.method);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return await response.json();
     } catch (error) {
       console.error(`Error in ${this.endpoint} API call:`, error);
       throw error;
     }
-  }
-  
-  // Mock implementation - replace with actual API calls
-  private getMockData(path: string, method?: string): Promise<any> {
-    // This is just for development to avoid the Buffer error
-    // In production, this would be real API calls
-    return Promise.resolve({ message: "Mock data for development" });
   }
 
   // Standard CRUD operations

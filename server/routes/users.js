@@ -1,5 +1,6 @@
 const express = require('express');
 const { User } = require('../models');
+const { authorize } = require('../middleware/authorize');
 const router = express.Router();
 
 // Get all users (with optional clinic filter)
@@ -79,8 +80,8 @@ router.get('/clinic/:clinicId', async (req, res) => {
   }
 });
 
-// Create new user
-router.post('/', async (req, res) => {
+// Create new user - Admin only
+router.post('/', authorize(['admin']), async (req, res) => {
   try {
     const { v4: uuidv4 } = require('uuid');
     const bcrypt = require('bcrypt');
@@ -116,8 +117,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update user
-router.put('/:id', async (req, res) => {
+// Update user - Admin only
+router.put('/:id', authorize(['admin']), async (req, res) => {
   try {
     // Map clinic name to clinic_id
     const clinicMap = {
@@ -169,8 +170,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete user (soft delete)
-router.delete('/:id', async (req, res) => {
+// Delete user (soft delete) - Admin only
+router.delete('/:id', authorize(['admin']), async (req, res) => {
   try {
     const [updatedRows] = await User.update(
       { is_active: false },
